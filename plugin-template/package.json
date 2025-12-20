@@ -6,6 +6,9 @@
     "build": "vite build",
     "dev": "vite build --watch"
   },
+  "dependencies": {
+    "@treeline-money/plugin-sdk": "^0.1.0"
+  },
   "devDependencies": {
     "@sveltejs/vite-plugin-svelte": "^5.0.4",
     "@tsconfig/svelte": "^5.0.4",

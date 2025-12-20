@@ -1,4 +1,4 @@
-import type { Plugin, PluginContext } from "./types";
+import type { Plugin, PluginContext } from "@treeline-money/plugin-sdk";
 import HelloWorldView from "./HelloWorldView.svelte";
 import { mount, unmount } from "svelte";
 

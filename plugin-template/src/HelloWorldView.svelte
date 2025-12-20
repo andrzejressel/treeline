@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, onDestroy } from "svelte";
-  import type { PluginSDK } from "./types";
+  import type { PluginSDK } from "@treeline-money/plugin-sdk";
 
   // Props passed by Treeline when mounting the view
   interface Props {
