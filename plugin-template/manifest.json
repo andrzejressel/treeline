@@ -1,0 +1,14 @@
+{
+  "id": "hello-world",
+  "name": "Hello World",
+  "version": "0.1.0",
+  "description": "An example plugin demonstrating the Treeline plugin SDK",
+  "author": "Your Name",
+  "main": "index.js",
+  "permissions": {
+    "tables": {
+      "read": ["transactions", "accounts"],
+      "create": ["sys_plugin_hello_world"]
+    }
+  }
+}

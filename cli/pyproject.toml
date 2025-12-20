@@ -1,0 +1,83 @@
+[project]
+name = "treeline"
+version = "0.1.48"
+description = "Personal finance in your terminal"
+readme = "README.md"
+requires-python = ">=3.12"
+license = {text = "MIT"}
+authors = [
+    {name = "Zack Schrag"}
+]
+keywords = [
+    "personal-finance",
+    "cli",
+    "duckdb",
+    "sql",
+    "finance",
+    "banking",
+    "transactions",
+    "simplefin",
+    "budget",
+    "money"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Office/Business :: Financial",
+    "Topic :: Utilities",
+    "Typing :: Typed",
+]
+dependencies = [
+    "argon2-cffi>=23.1.0",
+    "duckdb>=1.4.0",
+    "httpx>=0.28.1",
+    "prompt-toolkit>=3.0.52",
+    "pydantic>=2.11.9",
+    "python-dotenv>=1.1.1",
+    "pytz>=2025.2",
+    "readchar>=4.2.1",
+    "rich>=14.1.0",
+    "typer>=0.19.2",
+]
+
+[project.urls]
+Homepage = "https://github.com/treeline-money/treeline"
+Repository = "https://github.com/treeline-money/treeline"
+Issues = "https://github.com/treeline-money/treeline/issues"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+treeline = ["themes/*.json", "infra/migrations/*.sql"]
+
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+package = true
+
+[project.scripts]
+treeline = "treeline.cli:app"
+tl = "treeline.cli:app"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.16.0",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+]

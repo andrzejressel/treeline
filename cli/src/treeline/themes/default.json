@@ -1,0 +1,32 @@
+{
+  "name": "Treeline Default (Dark)",
+  "description": "Dark theme with sage greens and warm earth tones - inspired by mountains and nature",
+  "colors": {
+    "primary": "#44755a",
+    "success": "#4A7C59",
+    "error": "#F87171",
+    "warning": "#FBBF24",
+    "info": "#7C9885",
+    "muted": "dim #9CA3AF",
+    "emphasis": "bold",
+    "highlight": "bold #44755a",
+    "separator": "dim #374151",
+    "link": "#7C9885 underline",
+    "positive_amount": "#4A7C59",
+    "negative_amount": "#F87171",
+    "neutral": "#F9FAFB"
+  },
+  "status": {
+    "loading": "bold #44755a",
+    "complete": "#4A7C59",
+    "failed": "#F87171"
+  },
+  "ui": {
+    "header": "bold #44755a",
+    "subheader": "#75B58F",
+    "label": "dim #9CA3AF",
+    "value": "#F9FAFB",
+    "selected": "bold #44755a",
+    "unselected": "#E5E7EB"
+  }
+}
