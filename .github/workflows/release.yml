@@ -57,6 +57,7 @@ jobs:
   publish-npm:
     needs: test
     runs-on: ubuntu-latest
+    environment: npm
     permissions:
       id-token: write
     defaults:
