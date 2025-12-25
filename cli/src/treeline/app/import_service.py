@@ -1,11 +1,14 @@
 """Service for one-time bulk imports from files or external sources."""
 
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, TYPE_CHECKING
 from uuid import UUID
 
 from treeline.abstractions import DataAggregationProvider, Repository
 from treeline.domain import Result, Transaction
+
+if TYPE_CHECKING:
+    from treeline.app.tagging_service import TaggingService
 
 
 class ImportService:
@@ -15,9 +18,11 @@ class ImportService:
         self,
         repository: Repository,
         provider_registry: Dict[str, DataAggregationProvider],
+        tagging_service: "TaggingService",
     ):
         self.repository = repository
         self.provider_registry = provider_registry
+        self.tagging_service = tagging_service
 
     async def import_transactions(
         self,
@@ -107,12 +112,18 @@ class ImportService:
             skipped_count += discovered_count - new_count
 
         # Bulk insert (not upsert, these are all new)
+        imported_transactions = []
         if transactions_to_import:
             import_result = await self.repository.bulk_upsert_transactions(
                 transactions_to_import
             )
             if not import_result.success:
                 return import_result
+            imported_transactions = import_result.data or []
+
+            # Apply auto-tagging rules to newly imported transactions
+            if imported_transactions:
+                await self.tagging_service.apply_auto_tag_rules(imported_transactions)
 
         return Result(
             success=True,

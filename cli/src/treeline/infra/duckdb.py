@@ -997,6 +997,82 @@ class DuckDBRepository(Repository):
         except Exception as e:
             return Fail(f"Failed to update transaction tags: {str(e)}")
 
+    async def get_enabled_tag_rules(self) -> Result[List[Dict[str, Any]]]:
+        """Get all enabled auto-tagging rules."""
+        try:
+            conn = self._get_connection(read_only=True)
+
+            result = conn.execute("""
+                SELECT rule_id, name, sql_condition, tags
+                FROM sys_plugin_transactions_rules
+                WHERE enabled = true
+                ORDER BY sort_order ASC
+            """).fetchall()
+
+            rules = []
+            for row in result:
+                rules.append({
+                    "rule_id": row[0],
+                    "name": row[1],
+                    "sql_condition": row[2],
+                    "tags": list(row[3]) if row[3] else [],
+                })
+
+            conn.close()
+            return Ok(rules)
+        except Exception as e:
+            # Table might not exist yet - return empty list
+            if "does not exist" in str(e).lower():
+                return Ok([])
+            return Fail(f"Failed to get enabled tag rules: {str(e)}")
+
+    async def apply_tags_to_transactions(
+        self,
+        transaction_ids: List[UUID],
+        sql_condition: str,
+        tags: List[str],
+    ) -> Result[int]:
+        """Apply tags to transactions matching a condition.
+
+        Only updates transactions in the provided list that match the condition
+        and don't already have all the specified tags.
+        """
+        try:
+            if not transaction_ids or not sql_condition or not tags:
+                return Ok(0)
+
+            conn = self._get_connection(read_only=False)
+
+            # Build ID filter
+            id_placeholders = ", ".join(f"'{tid}'" for tid in transaction_ids)
+            id_filter = f"transaction_id IN ({id_placeholders})"
+
+            # Combine rule condition with transaction ID filter
+            combined_condition = f"({sql_condition}) AND {id_filter}"
+
+            # Build tags literal for DuckDB list operations
+            tags_literal = "[" + ", ".join(f"'{t}'" for t in tags) + "]"
+
+            # Update matching transactions to merge tags
+            # DuckDB: list_distinct(list_concat(existing, new))
+            update_query = f"""
+                UPDATE sys_transactions
+                SET tags = list_distinct(list_concat(
+                    COALESCE(tags, []),
+                    {tags_literal}
+                ))
+                WHERE {combined_condition}
+                AND NOT list_has_all(COALESCE(tags, []), {tags_literal})
+            """
+
+            conn.execute(update_query)
+            conn.close()
+
+            # DuckDB doesn't return affected row count easily, return -1 to indicate success
+            return Ok(-1)
+        except Exception as e:
+            return Fail(f"Failed to apply tags to transactions: {str(e)}")
+
     async def compact(self) -> Result[Dict[str, Any]]:
         """Compact the database to reclaim space from deleted rows.
 

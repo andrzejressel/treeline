@@ -240,3 +240,38 @@ class Repository(ABC):
         """
         pass
 
+    @abstractmethod
+    async def get_enabled_tag_rules(self) -> Result[List[Dict[str, Any]]]:
+        """Get all enabled auto-tagging rules.
+
+        Returns:
+            Result containing list of rule dicts with:
+              - rule_id: str
+              - name: str
+              - sql_condition: str
+              - tags: List[str]
+        """
+        pass
+
+    @abstractmethod
+    async def apply_tags_to_transactions(
+        self,
+        transaction_ids: List[UUID],
+        sql_condition: str,
+        tags: List[str],
+    ) -> Result[int]:
+        """Apply tags to transactions matching a condition.
+
+        Only updates transactions in the provided list that match the condition
+        and don't already have all the specified tags.
+
+        Args:
+            transaction_ids: List of transaction IDs to consider
+            sql_condition: SQL WHERE clause condition
+            tags: Tags to add to matching transactions
+
+        Returns:
+            Result containing count of transactions updated
+        """
+        pass
+

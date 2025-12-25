@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from treeline.app.account_service import AccountService
     from treeline.app.integration_service import IntegrationService
     from treeline.app.preferences_service import PreferencesService
+    from treeline.app.tagging_service import TaggingService
 
 
 class SyncService:
@@ -22,12 +23,14 @@ class SyncService:
         account_service: "AccountService",
         integration_service: "IntegrationService",
         preferences_service: "PreferencesService",
+        tagging_service: "TaggingService",
     ):
         self.provider_registry = provider_registry
         self.repository = repository
         self.account_service = account_service
         self.integration_service = integration_service
         self.preferences_service = preferences_service
+        self.tagging_service = tagging_service
 
     def _get_provider(self, integration_name: str) -> DataAggregationProvider | None:
         """Get the provider for a given integration name."""
@@ -306,6 +309,10 @@ class SyncService:
             if not ingested_result.success:
                 return ingested_result
             ingested_transactions = ingested_result.data
+
+            # Apply auto-tagging rules to newly inserted transactions
+            if ingested_transactions:
+                await self.tagging_service.apply_auto_tag_rules(ingested_transactions)
 
         return Result(
             success=True,

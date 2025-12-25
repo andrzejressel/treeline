@@ -179,6 +179,7 @@ class Container:
                 self.account_service(),
                 self.integration_service(),
                 self.preferences_service(),
+                self.tagging_service(),
             )
         return self._instances["sync_service"]
 
@@ -240,7 +241,7 @@ class Container:
         """Get the import service instance."""
         if "import_service" not in self._instances:
             self._instances["import_service"] = ImportService(
-                self.repository(), self.provider_registry()
+                self.repository(), self.provider_registry(), self.tagging_service()
             )
         return self._instances["import_service"]
 
