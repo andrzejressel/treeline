@@ -1,5 +1,6 @@
 """Service for one-time bulk imports from files or external sources."""
 
+import time
 from datetime import datetime, timezone
 from typing import Any, Dict, List, TYPE_CHECKING
 from uuid import UUID
@@ -40,6 +41,14 @@ class ImportService:
         Returns:
             Result with stats: {"discovered": 150, "imported": 120, "skipped": 30}
         """
+        # Generate batch ID for this import
+        batch_id = f"import_{int(time.time() * 1000)}"
+        filename = (
+            source_options.get("file_path", "").split("/")[-1]
+            if source_options.get("file_path")
+            else ""
+        )
+
         # Get provider
         provider = self.provider_registry.get(source_type.lower())
         if not provider:
@@ -111,6 +120,12 @@ class ImportService:
                 )
             skipped_count += discovered_count - new_count
 
+        # Add batch tracking info to each transaction's external_ids
+        for i, tx in enumerate(transactions_to_import):
+            ext_ids = dict(tx.external_ids)
+            ext_ids["csv_import"] = {"batch_id": batch_id, "filename": filename}
+            transactions_to_import[i] = tx.model_copy(update={"external_ids": ext_ids})
+
         # Bulk insert (not upsert, these are all new)
         imported_transactions = []
         if transactions_to_import:
@@ -128,6 +143,7 @@ class ImportService:
         return Result(
             success=True,
             data={
+                "batch_id": batch_id,
                 "discovered": len(discovered_transactions),
                 "imported": len(transactions_to_import),
                 "skipped": skipped_count,
