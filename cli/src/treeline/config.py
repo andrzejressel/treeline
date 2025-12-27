@@ -70,7 +70,6 @@ def set_demo_mode(enabled: bool) -> None:
 # =============================================================================
 
 from typing import TypedDict, Optional, List
-from datetime import datetime
 
 
 class ImportProfileColumnMappings(TypedDict, total=False):
@@ -91,11 +90,23 @@ class ImportProfile(TypedDict, total=False):
     options: ImportProfileOptions
 
 
+def _get_import_profiles_container(settings: Dict[str, Any]) -> Dict[str, Any]:
+    """Get the importProfiles container, ensuring nested structure exists."""
+    if "importProfiles" not in settings:
+        settings["importProfiles"] = {}
+    container = settings["importProfiles"]
+    if "profiles" not in container:
+        container["profiles"] = {}
+    if "accountMappings" not in container:
+        container["accountMappings"] = {}
+    return container
+
+
 def get_import_profile(name: str) -> Optional[ImportProfile]:
     """Get import profile by name. Returns None if not found."""
     settings = load_settings()
-    profiles = settings.get("importProfiles", {})
-    return profiles.get(name)
+    container = _get_import_profiles_container(settings)
+    return container["profiles"].get(name)
 
 
 def save_import_profile(
@@ -106,10 +117,9 @@ def save_import_profile(
 ) -> None:
     """Save or update a named import profile."""
     settings = load_settings()
-    if "importProfiles" not in settings:
-        settings["importProfiles"] = {}
+    container = _get_import_profiles_container(settings)
 
-    settings["importProfiles"][name] = {
+    container["profiles"][name] = {
         "columnMappings": column_mappings,
         "options": {
             "flipSigns": flip_signs,
@@ -122,10 +132,9 @@ def save_import_profile(
 def delete_import_profile(name: str) -> bool:
     """Delete import profile by name. Returns True if deleted, False if not found."""
     settings = load_settings()
-    profiles = settings.get("importProfiles", {})
-    if name in profiles:
-        del profiles[name]
-        settings["importProfiles"] = profiles
+    container = _get_import_profiles_container(settings)
+    if name in container["profiles"]:
+        del container["profiles"][name]
         save_settings(settings)
         return True
     return False
@@ -134,10 +143,50 @@ def delete_import_profile(name: str) -> bool:
 def list_import_profiles() -> List[str]:
     """Get list of all profile names."""
     settings = load_settings()
-    return list(settings.get("importProfiles", {}).keys())
+    container = _get_import_profiles_container(settings)
+    return list(container["profiles"].keys())
 
 
 def get_all_import_profiles() -> Dict[str, ImportProfile]:
     """Get all import profiles."""
     settings = load_settings()
-    return settings.get("importProfiles", {})
+    container = _get_import_profiles_container(settings)
+    return container["profiles"]
+
+
+# =============================================================================
+# Account to Profile Mappings
+# =============================================================================
+
+
+def get_account_profile_mapping(account_id: str) -> Optional[str]:
+    """Get the profile name mapped to an account. Returns None if not mapped."""
+    settings = load_settings()
+    container = _get_import_profiles_container(settings)
+    return container["accountMappings"].get(account_id)
+
+
+def set_account_profile_mapping(account_id: str, profile_name: str) -> None:
+    """Set the profile mapping for an account."""
+    settings = load_settings()
+    container = _get_import_profiles_container(settings)
+    container["accountMappings"][account_id] = profile_name
+    save_settings(settings)
+
+
+def remove_account_profile_mapping(account_id: str) -> bool:
+    """Remove the profile mapping for an account. Returns True if removed."""
+    settings = load_settings()
+    container = _get_import_profiles_container(settings)
+    if account_id in container["accountMappings"]:
+        del container["accountMappings"][account_id]
+        save_settings(settings)
+        return True
+    return False
+
+
+def get_all_account_profile_mappings() -> Dict[str, str]:
+    """Get all account to profile mappings."""
+    settings = load_settings()
+    container = _get_import_profiles_container(settings)
+    return container["accountMappings"]
