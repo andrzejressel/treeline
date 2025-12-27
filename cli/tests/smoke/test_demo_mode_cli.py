@@ -410,6 +410,99 @@ class TestImportCommand:
             assert result.returncode != 0
             assert "account-id" in result.stdout.lower() or "account-id" in result.stderr.lower()
 
+    def test_import_list_profiles_empty(self):
+        """Test that --list-profiles shows no profiles initially."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            result = run_cli(["import", "--list-profiles"], tmpdir)
+            assert result.returncode == 0
+            assert "no saved profiles" in result.stdout.lower()
+
+    def test_import_save_and_use_profile(self):
+        """Test saving a profile with --save-profile and using it with --profile."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_cli(["demo", "on"], tmpdir)
+
+            # Create test CSV
+            csv_path = Path(tmpdir) / "test.csv"
+            csv_path.write_text("Date,Description,Amount\n2025-01-01,ProfileTest1,-50.00\n")
+
+            # Get account ID
+            result = run_cli(["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir)
+            data = json.loads(result.stdout)
+            account_id = data["rows"][0][0]
+
+            # Import with --save-profile
+            result = run_cli([
+                "import", str(csv_path),
+                "--account-id", account_id,
+                "--save-profile", "testbank"
+            ], tmpdir)
+            assert result.returncode == 0
+            assert "profile 'testbank' saved" in result.stdout.lower()
+
+            # Verify profile appears in list
+            result = run_cli(["import", "--list-profiles"], tmpdir)
+            assert result.returncode == 0
+            assert "testbank" in result.stdout.lower()
+
+            # Create another CSV and import using the saved profile
+            csv_path2 = Path(tmpdir) / "test2.csv"
+            csv_path2.write_text("Date,Description,Amount\n2025-01-02,ProfileTest2,-75.00\n")
+
+            result = run_cli([
+                "import", str(csv_path2),
+                "--account-id", account_id,
+                "--profile", "testbank"
+            ], tmpdir)
+            assert result.returncode == 0
+            assert "using profile 'testbank'" in result.stdout.lower()
+
+    def test_import_profile_not_found(self):
+        """Test that --profile with non-existent profile shows error."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_cli(["demo", "on"], tmpdir)
+
+            csv_path = Path(tmpdir) / "test.csv"
+            csv_path.write_text("Date,Description,Amount\n2025-01-01,Test,-50.00\n")
+
+            result = run_cli(["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir)
+            data = json.loads(result.stdout)
+            account_id = data["rows"][0][0]
+
+            result = run_cli([
+                "import", str(csv_path),
+                "--account-id", account_id,
+                "--profile", "nonexistent"
+            ], tmpdir)
+            assert result.returncode != 0
+            assert "not found" in result.stdout.lower() or "not found" in result.stderr.lower()
+
+    def test_import_list_profiles_json(self):
+        """Test that --list-profiles --json outputs valid JSON."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            run_cli(["demo", "on"], tmpdir)
+
+            # Create and save a profile first
+            csv_path = Path(tmpdir) / "test.csv"
+            csv_path.write_text("Date,Description,Amount\n2025-01-01,Test,-50.00\n")
+
+            result = run_cli(["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir)
+            data = json.loads(result.stdout)
+            account_id = data["rows"][0][0]
+
+            run_cli([
+                "import", str(csv_path),
+                "--account-id", account_id,
+                "--save-profile", "jsontest"
+            ], tmpdir)
+
+            # List profiles as JSON
+            result = run_cli(["import", "--list-profiles", "--json"], tmpdir)
+            assert result.returncode == 0
+            profiles = json.loads(result.stdout)
+            assert "jsontest" in profiles
+            assert "columnMappings" in profiles["jsontest"]
+
 
 class TestRemoveCommand:
     """Tests for tl remove command."""

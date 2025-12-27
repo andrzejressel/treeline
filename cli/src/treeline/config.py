@@ -63,3 +63,81 @@ def set_demo_mode(enabled: bool) -> None:
         settings["app"] = {}
     settings["app"]["demoMode"] = enabled
     save_settings(settings)
+
+
+# =============================================================================
+# Import Profiles (named, reusable across accounts)
+# =============================================================================
+
+from typing import TypedDict, Optional, List
+from datetime import datetime
+
+
+class ImportProfileColumnMappings(TypedDict, total=False):
+    date: str
+    amount: str
+    description: str
+    debit: str
+    credit: str
+
+
+class ImportProfileOptions(TypedDict, total=False):
+    flipSigns: bool
+    debitNegative: bool
+
+
+class ImportProfile(TypedDict, total=False):
+    columnMappings: ImportProfileColumnMappings
+    options: ImportProfileOptions
+
+
+def get_import_profile(name: str) -> Optional[ImportProfile]:
+    """Get import profile by name. Returns None if not found."""
+    settings = load_settings()
+    profiles = settings.get("importProfiles", {})
+    return profiles.get(name)
+
+
+def save_import_profile(
+    name: str,
+    column_mappings: Dict[str, str],
+    flip_signs: bool = False,
+    debit_negative: bool = False,
+) -> None:
+    """Save or update a named import profile."""
+    settings = load_settings()
+    if "importProfiles" not in settings:
+        settings["importProfiles"] = {}
+
+    settings["importProfiles"][name] = {
+        "columnMappings": column_mappings,
+        "options": {
+            "flipSigns": flip_signs,
+            "debitNegative": debit_negative,
+        },
+    }
+    save_settings(settings)
+
+
+def delete_import_profile(name: str) -> bool:
+    """Delete import profile by name. Returns True if deleted, False if not found."""
+    settings = load_settings()
+    profiles = settings.get("importProfiles", {})
+    if name in profiles:
+        del profiles[name]
+        settings["importProfiles"] = profiles
+        save_settings(settings)
+        return True
+    return False
+
+
+def list_import_profiles() -> List[str]:
+    """Get list of all profile names."""
+    settings = load_settings()
+    return list(settings.get("importProfiles", {}).keys())
+
+
+def get_all_import_profiles() -> Dict[str, ImportProfile]:
+    """Get all import profiles."""
+    settings = load_settings()
+    return settings.get("importProfiles", {})

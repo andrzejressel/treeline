@@ -14,6 +14,7 @@ from rich.table import Table
 
 from treeline.app.account_service import AccountService
 from treeline.app.import_service import ImportService
+from treeline.config import get_import_profile, save_import_profile, list_import_profiles, get_all_import_profiles
 from treeline.domain import Account, Transaction
 from treeline.theme import get_theme
 
@@ -30,6 +31,7 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
     def import_command(
         file_path: str = typer.Argument(None, help="Path to CSV file (omit for interactive mode)"),
         account_id: str = typer.Option(None, "--account-id", help="Account ID to import into"),
+        profile: str = typer.Option(None, "--profile", help="Use a saved import profile by name"),
         date_column: str = typer.Option(None, "--date-column", help="CSV column name for date"),
         amount_column: str = typer.Option(None, "--amount-column", help="CSV column name for amount"),
         description_column: str = typer.Option(None, "--description-column", help="CSV column name for description"),
@@ -38,17 +40,51 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
         flip_signs: bool = typer.Option(False, "--flip-signs", help="Flip transaction signs (for credit cards)"),
         debit_negative: bool = typer.Option(False, "--debit-negative", help="Negate debit amounts"),
         preview: bool = typer.Option(False, "--preview", help="Preview only, don't import"),
+        save_profile_name: str = typer.Option(None, "--save-profile", help="Save settings as a named profile"),
+        show_profiles: bool = typer.Option(False, "--list-profiles", help="List saved import profiles"),
         json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     ) -> None:
         """Import transactions from CSV file.
 
         Run 'tl import' with no arguments for interactive mode with auto-detection.
 
+        Profiles: Save and reuse column mappings across imports.
+          --save-profile <name>  Save current settings as a named profile
+          --profile <name>       Use a saved profile
+          --list-profiles        Show all saved profiles
+
         Examples:
           tl import
           tl import transactions.csv --account-id <uuid>
-          tl import transactions.csv --account-id <uuid> --preview
+          tl import transactions.csv --account-id <uuid> --save-profile chase
+          tl import transactions.csv --account-id <uuid> --profile chase
+          tl import --list-profiles
         """
+        # Handle --list-profiles before initialization
+        if show_profiles:
+            profiles = get_all_import_profiles()
+            if json_output:
+                print(json_module.dumps(profiles, indent=2))
+            elif not profiles:
+                console.print(f"[{theme.muted}]No saved profiles[/{theme.muted}]")
+                console.print(f"[{theme.muted}]Use --save-profile <name> after an import to create one[/{theme.muted}]")
+            else:
+                console.print(f"\n[{theme.ui_header}]Saved Import Profiles[/{theme.ui_header}]\n")
+                for name, prof in profiles.items():
+                    mappings = prof.get("columnMappings", {})
+                    options = prof.get("options", {})
+                    console.print(f"  [{theme.info}]{name}[/{theme.info}]")
+                    console.print(f"    Columns: {', '.join(f'{k}={v}' for k, v in mappings.items())}")
+                    if options.get("flipSigns") or options.get("debitNegative"):
+                        opts = []
+                        if options.get("flipSigns"):
+                            opts.append("flip-signs")
+                        if options.get("debitNegative"):
+                            opts.append("debit-negative")
+                        console.print(f"    Options: {', '.join(opts)}")
+                console.print()
+            return
+
         ensure_initialized()
 
         container = get_container()
@@ -73,6 +109,7 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
             flip_signs = params["flip_signs"]
             debit_negative = params["debit_negative"]
             column_mapping = params["column_mapping"]
+            save_profile_name = params.get("save_profile_name")
         else:
             # Scriptable mode - validate required params
             csv_path = Path(file_path).expanduser()
@@ -86,14 +123,31 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
                 console.print(f"[{theme.muted}]Run 'tl status --json' to see account IDs[/{theme.muted}]")
                 raise typer.Exit(1)
 
-            # Build column mapping from CLI args or auto-detect
-            column_mapping = _build_column_mapping(
-                date_column, amount_column, description_column, debit_column, credit_column
-            )
-            if not column_mapping:
-                column_mapping = _detect_columns(import_service, file_path, json_output)
-                if column_mapping is None:
+            # If --profile specified, load it
+            if profile:
+                saved_profile = get_import_profile(profile)
+                if not saved_profile:
+                    console.print(f"[{theme.error}]Error: Profile '{profile}' not found[/{theme.error}]")
+                    console.print(f"[{theme.muted}]Run 'tl import --list-profiles' to see available profiles[/{theme.muted}]")
                     raise typer.Exit(1)
+                column_mapping = saved_profile.get("columnMappings", {})
+                options = saved_profile.get("options", {})
+                # Apply saved options (CLI flags can still override)
+                if not flip_signs and options.get("flipSigns"):
+                    flip_signs = True
+                if not debit_negative and options.get("debitNegative"):
+                    debit_negative = True
+                if not json_output:
+                    console.print(f"[{theme.success}]Using profile '{profile}'[/{theme.success}]")
+            else:
+                # Build column mapping from CLI args or auto-detect
+                column_mapping = _build_column_mapping(
+                    date_column, amount_column, description_column, debit_column, credit_column
+                )
+                if not column_mapping:
+                    column_mapping = _detect_columns(import_service, file_path, json_output)
+                    if column_mapping is None:
+                        raise typer.Exit(1)
 
         # Preview mode
         if preview:
@@ -101,10 +155,17 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
             return
 
         # Import mode
+        account_uuid = UUID(account_id) if isinstance(account_id, str) else account_id
         _do_import(
-            import_service, file_path, UUID(account_id) if isinstance(account_id, str) else account_id,
+            import_service, file_path, account_uuid,
             column_mapping, flip_signs, debit_negative, json_output
         )
+
+        # Save profile after successful import if requested
+        if save_profile_name:
+            save_import_profile(save_profile_name, column_mapping, flip_signs, debit_negative)
+            if not json_output:
+                console.print(f"[{theme.success}]✓ Profile '{save_profile_name}' saved[/{theme.success}]")
 
 
 # =============================================================================
@@ -183,7 +244,7 @@ def _do_import(
     debit_negative: bool,
     json_output: bool,
 ) -> None:
-    """Execute the import."""
+    """Execute the import. Raises typer.Exit(1) on failure."""
     source_options = {
         "file_path": file_path,
         "column_mapping": column_mapping,
@@ -287,31 +348,72 @@ def _collect_params_interactive(
         account_id = create_result.data.id
         console.print(f"[{theme.success}]✓ Created account '{account_details['name']}' ({account_details['account_type']})[/{theme.success}]")
 
-    # 3. Auto-detect columns
-    console.print(f"\n[{theme.muted}]Detecting CSV columns...[/{theme.muted}]")
-    detect_result = asyncio.run(import_service.detect_columns(source_type="csv", file_path=str(csv_path)))
-    if not detect_result.success:
-        console.print(f"[{theme.error}]Error detecting columns: {detect_result.error}[/{theme.error}]\n")
-        return None
+    # 3. Check if user wants to use a saved profile
+    available_profiles = list_import_profiles()
+    column_mapping = None
+    flip_signs = False
+    debit_negative = False
 
-    column_mapping = detect_result.data
-    console.print(f"\n[{theme.success}]Detected columns:[/{theme.success}]")
-    for field, column in column_mapping.items():
-        console.print(f"  {field}: {column}")
+    if available_profiles:
+        console.print(f"\n[{theme.info}]Available profiles: {', '.join(available_profiles)}[/{theme.info}]")
+        try:
+            use_profile = Prompt.ask(
+                f"[{theme.info}]Use a saved profile? (enter name or press Enter to skip)[/{theme.info}]",
+                default=""
+            )
+        except (KeyboardInterrupt, EOFError):
+            console.print(f"\n[{theme.warning}]Import cancelled[/{theme.warning}]\n")
+            return None
 
+        if use_profile.strip():
+            saved_profile = get_import_profile(use_profile.strip())
+            if saved_profile:
+                column_mapping = saved_profile.get("columnMappings", {})
+                options = saved_profile.get("options", {})
+                flip_signs = options.get("flipSigns", False)
+                debit_negative = options.get("debitNegative", False)
+                console.print(f"[{theme.success}]Using profile '{use_profile}'[/{theme.success}]")
+            else:
+                console.print(f"[{theme.warning}]Profile '{use_profile}' not found, auto-detecting...[/{theme.warning}]")
+
+    # 4. Auto-detect columns if no profile used
+    if not column_mapping:
+        console.print(f"\n[{theme.muted}]Detecting CSV columns...[/{theme.muted}]")
+        detect_result = asyncio.run(import_service.detect_columns(source_type="csv", file_path=str(csv_path)))
+        if not detect_result.success:
+            console.print(f"[{theme.error}]Error detecting columns: {detect_result.error}[/{theme.error}]\n")
+            return None
+
+        column_mapping = detect_result.data
+        console.print(f"\n[{theme.success}]Detected columns:[/{theme.success}]")
+        for field, column in column_mapping.items():
+            console.print(f"  {field}: {column}")
+
+    # Validate columns
     if not column_mapping.get("date") or (not column_mapping.get("amount") and not column_mapping.get("debit")):
         console.print(f"\n[{theme.warning}]Warning: Required columns not detected![/{theme.warning}]")
         console.print(f"[{theme.muted}]For manual column mapping, use scriptable mode:[/{theme.muted}]")
         console.print(f'[{theme.muted}]  tl import {csv_path.name} --date-column "YourDateColumn" --amount-column "YourAmountColumn"[/{theme.muted}]\n')
         return None
 
-    # 4. Interactive preview loop to confirm/adjust sign settings
-    flip_signs = False
-    debit_negative = False
+    # 5. Interactive preview loop to confirm/adjust sign settings
     flip_signs, debit_negative = _interactive_preview_loop(
         import_service, str(csv_path), column_mapping, flip_signs, debit_negative
     )
     if flip_signs is None:  # User cancelled
+        return None
+
+    # 6. Offer to save profile
+    save_profile_name = None
+    try:
+        save_name = Prompt.ask(
+            f"\n[{theme.info}]Save as profile? (enter name or press Enter to skip)[/{theme.info}]",
+            default=""
+        )
+        if save_name.strip():
+            save_profile_name = save_name.strip()
+    except (KeyboardInterrupt, EOFError):
+        console.print(f"\n[{theme.warning}]Import cancelled[/{theme.warning}]\n")
         return None
 
     return {
@@ -320,6 +422,7 @@ def _collect_params_interactive(
         "column_mapping": column_mapping,
         "flip_signs": flip_signs,
         "debit_negative": debit_negative,
+        "save_profile_name": save_profile_name,
     }
 
 
