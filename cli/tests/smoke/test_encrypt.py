@@ -90,7 +90,9 @@ class TestEncryptDecryptCycle:
                 ["encrypt", "-p", password],
                 tmpdir,
             )
-            assert result.returncode == 0, f"encrypt failed: {result.stderr}\n{result.stdout}"
+            assert result.returncode == 0, (
+                f"encrypt failed: {result.stderr}\n{result.stdout}"
+            )
             assert "encrypted successfully" in result.stdout.lower()
 
             # Verify status shows encrypted
@@ -99,7 +101,9 @@ class TestEncryptDecryptCycle:
                 tmpdir,
                 env_extras={"TL_DB_PASSWORD": password},
             )
-            assert result.returncode == 0, f"status failed: {result.stderr}\n{result.stdout}"
+            assert result.returncode == 0, (
+                f"status failed: {result.stderr}\n{result.stdout}"
+            )
             data = json.loads(result.stdout)
             assert data["encrypted"] is True
             assert data["algorithm"] == "argon2id"
@@ -110,7 +114,9 @@ class TestEncryptDecryptCycle:
                 tmpdir,
                 env_extras={"TL_DB_PASSWORD": password},
             )
-            assert result.returncode == 0, f"status --json failed: {result.stderr}\n{result.stdout}"
+            assert result.returncode == 0, (
+                f"status --json failed: {result.stderr}\n{result.stdout}"
+            )
 
             # Disable encryption
             result = run_cli(
@@ -118,7 +124,9 @@ class TestEncryptDecryptCycle:
                 tmpdir,
                 env_extras={"TL_DB_PASSWORD": password},
             )
-            assert result.returncode == 0, f"decrypt failed: {result.stderr}\n{result.stdout}"
+            assert result.returncode == 0, (
+                f"decrypt failed: {result.stderr}\n{result.stdout}"
+            )
             assert "decrypted successfully" in result.stdout.lower()
 
             # Verify status shows unencrypted
@@ -220,7 +228,9 @@ class TestEncryptErrors:
             result = run_cli(
                 ["decrypt", "-p", wrong_password],
                 tmpdir,
-                env_extras={"TL_DB_PASSWORD": correct_password},  # Container needs correct password
+                env_extras={
+                    "TL_DB_PASSWORD": correct_password
+                },  # Container needs correct password
             )
             assert result.returncode != 0
             assert "invalid password" in result.stdout.lower()
@@ -340,7 +350,9 @@ class TestEncryptedDatabaseOperations:
                 tmpdir,
                 env_extras={"TL_DB_PASSWORD": password},
             )
-            assert result.returncode == 0, f"query failed: {result.stderr}\n{result.stdout}"
+            assert result.returncode == 0, (
+                f"query failed: {result.stderr}\n{result.stdout}"
+            )
             data = json.loads(result.stdout)
             assert "columns" in data
 
@@ -361,7 +373,9 @@ class TestEncryptedDatabaseOperations:
                 tmpdir,
                 env_extras={"TL_DB_PASSWORD": password},
             )
-            assert result.returncode == 0, f"compact failed: {result.stderr}\n{result.stdout}"
+            assert result.returncode == 0, (
+                f"compact failed: {result.stderr}\n{result.stdout}"
+            )
             data = json.loads(result.stdout)
             assert "original_size" in data
             assert "compacted_size" in data

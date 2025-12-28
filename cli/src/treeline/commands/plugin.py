@@ -82,11 +82,16 @@ def register(app: typer.Typer, get_container: callable) -> None:
     def plugin_install_command(
         source: str = typer.Argument(..., help="Local directory path or GitHub URL"),
         version: str = typer.Option(
-            None, "--version", "-v", help="Version to install (e.g., v1.0.0). Defaults to latest release."
+            None,
+            "--version",
+            "-v",
+            help="Version to install (e.g., v1.0.0). Defaults to latest release.",
         ),
         json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
         force_build: bool = typer.Option(
-            False, "--rebuild", help="Force rebuild even if dist/index.js exists (local installs only)"
+            False,
+            "--rebuild",
+            help="Force rebuild even if dist/index.js exists (local installs only)",
         ),
     ) -> None:
         """Install a plugin from local directory or GitHub release.
@@ -104,10 +109,16 @@ def register(app: typer.Typer, get_container: callable) -> None:
         plugin_service = container.plugin_service()
 
         if not json_output:
-            with console.status(f"[{theme.status_loading}]Installing plugin from {source}..."):
-                result = plugin_service.install_plugin(source, version=version, force_build=force_build)
+            with console.status(
+                f"[{theme.status_loading}]Installing plugin from {source}..."
+            ):
+                result = plugin_service.install_plugin(
+                    source, version=version, force_build=force_build
+                )
         else:
-            result = plugin_service.install_plugin(source, version=version, force_build=force_build)
+            result = plugin_service.install_plugin(
+                source, version=version, force_build=force_build
+            )
 
         if not result.success:
             if json_output:
@@ -196,7 +207,9 @@ def register(app: typer.Typer, get_container: callable) -> None:
                 )
                 return
 
-            console.print(f"\n[{theme.ui_header}]Installed Plugins[/{theme.ui_header}]\n")
+            console.print(
+                f"\n[{theme.ui_header}]Installed Plugins[/{theme.ui_header}]\n"
+            )
 
             for plugin in plugins:
                 console.print(
@@ -204,16 +217,23 @@ def register(app: typer.Typer, get_container: callable) -> None:
                 )
                 console.print(f"  Version: {plugin['version']}")
                 if plugin.get("description"):
-                    console.print(f"  [{theme.muted}]{plugin['description']}[/{theme.muted}]")
+                    console.print(
+                        f"  [{theme.muted}]{plugin['description']}[/{theme.muted}]"
+                    )
                 if plugin.get("author"):
-                    console.print(f"  [{theme.muted}]by {plugin['author']}[/{theme.muted}]")
+                    console.print(
+                        f"  [{theme.muted}]by {plugin['author']}[/{theme.muted}]"
+                    )
                 console.print()
 
     @plugin_app.command(name="manifest")
     def plugin_manifest_command(
         source: str = typer.Argument(..., help="GitHub URL of the plugin"),
         version: str = typer.Option(
-            None, "--version", "-v", help="Version to fetch (e.g., v1.0.0). Defaults to latest release."
+            None,
+            "--version",
+            "-v",
+            help="Version to fetch (e.g., v1.0.0). Defaults to latest release.",
         ),
     ) -> None:
         """Fetch plugin manifest from GitHub release.

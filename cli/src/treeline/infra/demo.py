@@ -152,42 +152,162 @@ class DemoDataProvider(DataAggregationProvider, IntegrationProvider):
         # =========================================
         monthly_recurring = [
             # Income (tagged for budget tracking)
-            ("demo-checking-001", "Employer Direct Deposit - Payroll", Decimal("4250.00"), ["income", "salary"], 1),
-            ("demo-checking-001", "Employer Direct Deposit - Payroll", Decimal("4250.00"), ["income", "salary"], 15),
-
+            (
+                "demo-checking-001",
+                "Employer Direct Deposit - Payroll",
+                Decimal("4250.00"),
+                ["income", "salary"],
+                1,
+            ),
+            (
+                "demo-checking-001",
+                "Employer Direct Deposit - Payroll",
+                Decimal("4250.00"),
+                ["income", "salary"],
+                15,
+            ),
             # Rent/Mortgage
-            ("demo-checking-001", "Online Payment - Rent", Decimal("-2100.00"), ["housing", "rent"], 1),
-
+            (
+                "demo-checking-001",
+                "Online Payment - Rent",
+                Decimal("-2100.00"),
+                ["housing", "rent"],
+                1,
+            ),
             # Utilities
-            ("demo-checking-001", "PG&E - Electricity", Decimal("-142.87"), ["utilities"], 8),
-            ("demo-checking-001", "Comcast Internet", Decimal("-79.99"), ["utilities", "internet"], 12),
-            ("demo-checking-001", "T-Mobile", Decimal("-85.00"), ["utilities", "phone"], 18),
-
+            (
+                "demo-checking-001",
+                "PG&E - Electricity",
+                Decimal("-142.87"),
+                ["utilities"],
+                8,
+            ),
+            (
+                "demo-checking-001",
+                "Comcast Internet",
+                Decimal("-79.99"),
+                ["utilities", "internet"],
+                12,
+            ),
+            (
+                "demo-checking-001",
+                "T-Mobile",
+                Decimal("-85.00"),
+                ["utilities", "phone"],
+                18,
+            ),
             # Insurance
-            ("demo-checking-001", "State Farm Auto Insurance", Decimal("-156.00"), ["insurance", "auto"], 5),
-            ("demo-checking-001", "Kaiser Health Insurance", Decimal("-320.00"), ["insurance", "health"], 1),
-
+            (
+                "demo-checking-001",
+                "State Farm Auto Insurance",
+                Decimal("-156.00"),
+                ["insurance", "auto"],
+                5,
+            ),
+            (
+                "demo-checking-001",
+                "Kaiser Health Insurance",
+                Decimal("-320.00"),
+                ["insurance", "health"],
+                1,
+            ),
             # Subscriptions
-            ("demo-credit-001", "Netflix", Decimal("-15.99"), ["subscriptions", "entertainment"], 7),
-            ("demo-credit-001", "Spotify Premium", Decimal("-10.99"), ["subscriptions", "entertainment"], 7),
-            ("demo-credit-001", "NYTimes Digital", Decimal("-17.00"), ["subscriptions"], 14),
-            ("demo-credit-001", "iCloud Storage", Decimal("-2.99"), ["subscriptions"], 21),
-            ("demo-credit-002", "Amazon Prime", Decimal("-14.99"), ["subscriptions"], 3),
-            ("demo-credit-002", "YouTube Premium", Decimal("-13.99"), ["subscriptions", "entertainment"], 11),
-            ("demo-checking-001", "Planet Fitness", Decimal("-24.99"), ["subscriptions", "fitness"], 17),
-
+            (
+                "demo-credit-001",
+                "Netflix",
+                Decimal("-15.99"),
+                ["subscriptions", "entertainment"],
+                7,
+            ),
+            (
+                "demo-credit-001",
+                "Spotify Premium",
+                Decimal("-10.99"),
+                ["subscriptions", "entertainment"],
+                7,
+            ),
+            (
+                "demo-credit-001",
+                "NYTimes Digital",
+                Decimal("-17.00"),
+                ["subscriptions"],
+                14,
+            ),
+            (
+                "demo-credit-001",
+                "iCloud Storage",
+                Decimal("-2.99"),
+                ["subscriptions"],
+                21,
+            ),
+            (
+                "demo-credit-002",
+                "Amazon Prime",
+                Decimal("-14.99"),
+                ["subscriptions"],
+                3,
+            ),
+            (
+                "demo-credit-002",
+                "YouTube Premium",
+                Decimal("-13.99"),
+                ["subscriptions", "entertainment"],
+                11,
+            ),
+            (
+                "demo-checking-001",
+                "Planet Fitness",
+                Decimal("-24.99"),
+                ["subscriptions", "fitness"],
+                17,
+            ),
             # Savings & Investments
-            ("demo-savings-001", "Transfer from Checking", Decimal("750.00"), ["transfer"], 16),
+            (
+                "demo-savings-001",
+                "Transfer from Checking",
+                Decimal("750.00"),
+                ["transfer"],
+                16,
+            ),
             ("demo-savings-001", "Interest Payment", Decimal("78.23"), [], 28),
-            ("demo-investment-001", "Transfer from Checking", Decimal("500.00"), ["transfer", "investing"], 16),
-            ("demo-401k-001", "Employer 401k Contribution", Decimal("850.00"), ["investing"], 1),
-            ("demo-401k-001", "Employer 401k Contribution", Decimal("850.00"), ["investing"], 15),
+            (
+                "demo-investment-001",
+                "Transfer from Checking",
+                Decimal("500.00"),
+                ["transfer", "investing"],
+                16,
+            ),
+            (
+                "demo-401k-001",
+                "Employer 401k Contribution",
+                Decimal("850.00"),
+                ["investing"],
+                1,
+            ),
+            (
+                "demo-401k-001",
+                "Employer 401k Contribution",
+                Decimal("850.00"),
+                ["investing"],
+                15,
+            ),
             ("demo-401k-001", "Employer Match", Decimal("425.00"), ["investing"], 1),
             ("demo-401k-001", "Employer Match", Decimal("425.00"), ["investing"], 15),
-
             # Credit Card Payments
-            ("demo-credit-001", "Payment Thank You - Web", Decimal("2500.00"), ["payment"], 25),
-            ("demo-credit-002", "Online Payment - Thank You", Decimal("1200.00"), ["payment"], 20),
+            (
+                "demo-credit-001",
+                "Payment Thank You - Web",
+                Decimal("2500.00"),
+                ["payment"],
+                25,
+            ),
+            (
+                "demo-credit-002",
+                "Online Payment - Thank You",
+                Decimal("1200.00"),
+                ["payment"],
+                20,
+            ),
         ]
 
         # =========================================
@@ -196,8 +316,18 @@ class DemoDataProvider(DataAggregationProvider, IntegrationProvider):
 
         # Groceries - weekly pattern
         grocery_stores = [
-            ("demo-credit-002", "Whole Foods Market", Decimal("-127.43"), ["groceries", "food"]),
-            ("demo-credit-002", "Trader Joe's", Decimal("-68.92"), ["groceries", "food"]),
+            (
+                "demo-credit-002",
+                "Whole Foods Market",
+                Decimal("-127.43"),
+                ["groceries", "food"],
+            ),
+            (
+                "demo-credit-002",
+                "Trader Joe's",
+                Decimal("-68.92"),
+                ["groceries", "food"],
+            ),
             ("demo-credit-002", "Safeway", Decimal("-94.56"), ["groceries", "food"]),
             ("demo-credit-002", "Costco", Decimal("-215.87"), ["groceries", "food"]),
             ("demo-credit-002", "Target", Decimal("-78.34"), ["groceries", "shopping"]),
@@ -207,32 +337,102 @@ class DemoDataProvider(DataAggregationProvider, IntegrationProvider):
         coffee_shops = [
             ("demo-credit-001", "Starbucks", Decimal("-6.45"), ["coffee", "food"]),
             ("demo-credit-001", "Starbucks", Decimal("-5.75"), ["coffee", "food"]),
-            ("demo-credit-002", "Blue Bottle Coffee", Decimal("-7.50"), ["coffee", "food"]),
+            (
+                "demo-credit-002",
+                "Blue Bottle Coffee",
+                Decimal("-7.50"),
+                ["coffee", "food"],
+            ),
             ("demo-credit-001", "Philz Coffee", Decimal("-6.25"), ["coffee", "food"]),
         ]
 
         # Dining out - 2-3x per week
         restaurants = [
-            ("demo-credit-001", "Sweetgreen", Decimal("-16.87"), ["dining", "food", "lunch"]),
-            ("demo-credit-001", "Chipotle", Decimal("-14.25"), ["dining", "food", "lunch"]),
-            ("demo-credit-001", "Panera Bread", Decimal("-12.48"), ["dining", "food", "lunch"]),
-            ("demo-credit-001", "The Cheesecake Factory", Decimal("-78.45"), ["dining", "food"]),
+            (
+                "demo-credit-001",
+                "Sweetgreen",
+                Decimal("-16.87"),
+                ["dining", "food", "lunch"],
+            ),
+            (
+                "demo-credit-001",
+                "Chipotle",
+                Decimal("-14.25"),
+                ["dining", "food", "lunch"],
+            ),
+            (
+                "demo-credit-001",
+                "Panera Bread",
+                Decimal("-12.48"),
+                ["dining", "food", "lunch"],
+            ),
+            (
+                "demo-credit-001",
+                "The Cheesecake Factory",
+                Decimal("-78.45"),
+                ["dining", "food"],
+            ),
             ("demo-credit-001", "Olive Garden", Decimal("-62.30"), ["dining", "food"]),
-            ("demo-credit-001", "Local Thai Kitchen", Decimal("-45.00"), ["dining", "food"]),
+            (
+                "demo-credit-001",
+                "Local Thai Kitchen",
+                Decimal("-45.00"),
+                ["dining", "food"],
+            ),
             ("demo-credit-001", "Sushi Masa", Decimal("-89.50"), ["dining", "food"]),
-            ("demo-credit-002", "McDonald's", Decimal("-12.43"), ["dining", "food", "fast-food"]),
-            ("demo-credit-002", "Chick-fil-A", Decimal("-14.87"), ["dining", "food", "fast-food"]),
-            ("demo-credit-001", "DoorDash", Decimal("-34.56"), ["dining", "food", "delivery"]),
-            ("demo-credit-001", "Uber Eats", Decimal("-28.90"), ["dining", "food", "delivery"]),
+            (
+                "demo-credit-002",
+                "McDonald's",
+                Decimal("-12.43"),
+                ["dining", "food", "fast-food"],
+            ),
+            (
+                "demo-credit-002",
+                "Chick-fil-A",
+                Decimal("-14.87"),
+                ["dining", "food", "fast-food"],
+            ),
+            (
+                "demo-credit-001",
+                "DoorDash",
+                Decimal("-34.56"),
+                ["dining", "food", "delivery"],
+            ),
+            (
+                "demo-credit-001",
+                "Uber Eats",
+                Decimal("-28.90"),
+                ["dining", "food", "delivery"],
+            ),
         ]
 
         # Transportation
         transportation = [
             ("demo-credit-002", "Shell", Decimal("-58.43"), ["transportation", "gas"]),
-            ("demo-credit-002", "Chevron", Decimal("-52.17"), ["transportation", "gas"]),
-            ("demo-credit-001", "Uber", Decimal("-24.50"), ["transportation", "rideshare"]),
-            ("demo-credit-001", "Lyft", Decimal("-18.75"), ["transportation", "rideshare"]),
-            ("demo-checking-001", "BART", Decimal("-6.20"), ["transportation", "transit"]),
+            (
+                "demo-credit-002",
+                "Chevron",
+                Decimal("-52.17"),
+                ["transportation", "gas"],
+            ),
+            (
+                "demo-credit-001",
+                "Uber",
+                Decimal("-24.50"),
+                ["transportation", "rideshare"],
+            ),
+            (
+                "demo-credit-001",
+                "Lyft",
+                Decimal("-18.75"),
+                ["transportation", "rideshare"],
+            ),
+            (
+                "demo-checking-001",
+                "BART",
+                Decimal("-6.20"),
+                ["transportation", "transit"],
+            ),
         ]
 
         # Shopping
@@ -242,36 +442,91 @@ class DemoDataProvider(DataAggregationProvider, IntegrationProvider):
             ("demo-credit-001", "Amazon.com", Decimal("-23.45"), ["shopping"]),
             ("demo-credit-002", "Target", Decimal("-67.82"), ["shopping"]),
             ("demo-credit-002", "Walmart", Decimal("-45.23"), ["shopping"]),
-            ("demo-credit-001", "Best Buy", Decimal("-199.99"), ["shopping", "electronics"]),
-            ("demo-credit-001", "Apple Store", Decimal("-49.00"), ["shopping", "electronics"]),
+            (
+                "demo-credit-001",
+                "Best Buy",
+                Decimal("-199.99"),
+                ["shopping", "electronics"],
+            ),
+            (
+                "demo-credit-001",
+                "Apple Store",
+                Decimal("-49.00"),
+                ["shopping", "electronics"],
+            ),
             ("demo-credit-002", "Home Depot", Decimal("-87.43"), ["shopping", "home"]),
             ("demo-credit-002", "IKEA", Decimal("-234.56"), ["shopping", "home"]),
-            ("demo-credit-001", "Nordstrom", Decimal("-156.78"), ["shopping", "clothing"]),
+            (
+                "demo-credit-001",
+                "Nordstrom",
+                Decimal("-156.78"),
+                ["shopping", "clothing"],
+            ),
             ("demo-credit-001", "Uniqlo", Decimal("-89.97"), ["shopping", "clothing"]),
         ]
 
         # Health & Wellness
         health = [
-            ("demo-credit-002", "CVS Pharmacy", Decimal("-34.56"), ["health", "pharmacy"]),
+            (
+                "demo-credit-002",
+                "CVS Pharmacy",
+                Decimal("-34.56"),
+                ["health", "pharmacy"],
+            ),
             ("demo-credit-002", "Walgreens", Decimal("-28.90"), ["health", "pharmacy"]),
-            ("demo-checking-001", "Kaiser Pharmacy", Decimal("-15.00"), ["health", "pharmacy"]),
+            (
+                "demo-checking-001",
+                "Kaiser Pharmacy",
+                Decimal("-15.00"),
+                ["health", "pharmacy"],
+            ),
             ("demo-credit-001", "ClassPass", Decimal("-49.00"), ["fitness"]),
         ]
 
         # Entertainment
         entertainment = [
             ("demo-credit-001", "AMC Theatres", Decimal("-32.50"), ["entertainment"]),
-            ("demo-credit-001", "Eventbrite", Decimal("-75.00"), ["entertainment", "events"]),
-            ("demo-credit-001", "Steam", Decimal("-29.99"), ["entertainment", "gaming"]),
+            (
+                "demo-credit-001",
+                "Eventbrite",
+                Decimal("-75.00"),
+                ["entertainment", "events"],
+            ),
+            (
+                "demo-credit-001",
+                "Steam",
+                Decimal("-29.99"),
+                ["entertainment", "gaming"],
+            ),
         ]
 
         # Travel (occasional)
         travel = [
-            ("demo-credit-001", "United Airlines", Decimal("-387.00"), ["travel", "flights"]),
-            ("demo-credit-001", "Delta Airlines", Decimal("-452.00"), ["travel", "flights"]),
-            ("demo-credit-001", "Marriott Hotels", Decimal("-245.87"), ["travel", "hotels"]),
+            (
+                "demo-credit-001",
+                "United Airlines",
+                Decimal("-387.00"),
+                ["travel", "flights"],
+            ),
+            (
+                "demo-credit-001",
+                "Delta Airlines",
+                Decimal("-452.00"),
+                ["travel", "flights"],
+            ),
+            (
+                "demo-credit-001",
+                "Marriott Hotels",
+                Decimal("-245.87"),
+                ["travel", "hotels"],
+            ),
             ("demo-credit-001", "Airbnb", Decimal("-312.45"), ["travel", "lodging"]),
-            ("demo-credit-001", "Enterprise Rent-A-Car", Decimal("-156.78"), ["travel", "car-rental"]),
+            (
+                "demo-credit-001",
+                "Enterprise Rent-A-Car",
+                Decimal("-156.78"),
+                ["travel", "car-rental"],
+            ),
         ]
 
         # Personal Care
@@ -286,15 +541,25 @@ class DemoDataProvider(DataAggregationProvider, IntegrationProvider):
         current = start_date
         while current <= end_date:
             year, month = current.year, current.month
-            days_in_month = (date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)) - date(year, month, 1)
+            days_in_month = (
+                date(year, month + 1, 1) if month < 12 else date(year + 1, 1, 1)
+            ) - date(year, month, 1)
 
-            for account_id, description, amount, tags, day_of_month in monthly_recurring:
+            for (
+                account_id,
+                description,
+                amount,
+                tags,
+                day_of_month,
+            ) in monthly_recurring:
                 if account_ids and account_id not in account_ids:
                     continue
 
                 actual_day = min(day_of_month, days_in_month.days)
                 tx_date = date(year, month, actual_day)
-                tx_datetime = datetime.combine(tx_date, datetime.min.time()).replace(tzinfo=timezone.utc)
+                tx_datetime = datetime.combine(tx_date, datetime.min.time()).replace(
+                    tzinfo=timezone.utc
+                )
 
                 if tx_datetime < start_date or tx_datetime > end_date:
                     continue
@@ -302,7 +567,9 @@ class DemoDataProvider(DataAggregationProvider, IntegrationProvider):
                 transaction = Transaction(
                     id=uuid4(),
                     account_id=UUID(int=0),
-                    external_ids=MappingProxyType({"demo": f"demo-tx-{tx_counter:04d}"}),
+                    external_ids=MappingProxyType(
+                        {"demo": f"demo-tx-{tx_counter:04d}"}
+                    ),
                     amount=amount,
                     description=description,
                     transaction_date=tx_date,
@@ -345,14 +612,20 @@ class DemoDataProvider(DataAggregationProvider, IntegrationProvider):
                         continue
 
                     # Slight amount variance
-                    amount_variance = Decimal(str(self._deterministic_day(seed + "amt", 20) - 10)) / Decimal("100")
-                    final_amount = amount * (Decimal("1") + amount_variance / Decimal("10"))
+                    amount_variance = Decimal(
+                        str(self._deterministic_day(seed + "amt", 20) - 10)
+                    ) / Decimal("100")
+                    final_amount = amount * (
+                        Decimal("1") + amount_variance / Decimal("10")
+                    )
                     final_amount = final_amount.quantize(Decimal("0.01"))
 
                     transaction = Transaction(
                         id=uuid4(),
                         account_id=UUID(int=0),
-                        external_ids=MappingProxyType({"demo": f"demo-tx-{tx_counter:04d}"}),
+                        external_ids=MappingProxyType(
+                            {"demo": f"demo-tx-{tx_counter:04d}"}
+                        ),
                         amount=final_amount,
                         description=desc,
                         transaction_date=tx_date,
@@ -365,17 +638,17 @@ class DemoDataProvider(DataAggregationProvider, IntegrationProvider):
                     tx_counter += 1
 
         # Apply frequencies
-        add_variable_txns(grocery_stores, 7)      # Weekly groceries
-        add_variable_txns(coffee_shops, 3)         # Coffee every ~3 days
-        add_variable_txns(restaurants[:6], 5)      # Dining out frequently
-        add_variable_txns(restaurants[6:], 10)     # Less frequent dining
+        add_variable_txns(grocery_stores, 7)  # Weekly groceries
+        add_variable_txns(coffee_shops, 3)  # Coffee every ~3 days
+        add_variable_txns(restaurants[:6], 5)  # Dining out frequently
+        add_variable_txns(restaurants[6:], 10)  # Less frequent dining
         add_variable_txns(transportation[:2], 14)  # Gas bi-weekly
         add_variable_txns(transportation[2:], 10)  # Rideshare/transit
-        add_variable_txns(shopping[:5], 14)        # Regular shopping
-        add_variable_txns(shopping[5:], 30)        # Occasional shopping
-        add_variable_txns(health, 21)              # Health monthly-ish
-        add_variable_txns(entertainment, 21)       # Entertainment
-        add_variable_txns(personal, 28)            # Personal care monthly
+        add_variable_txns(shopping[:5], 14)  # Regular shopping
+        add_variable_txns(shopping[5:], 30)  # Occasional shopping
+        add_variable_txns(health, 21)  # Health monthly-ish
+        add_variable_txns(entertainment, 21)  # Entertainment
+        add_variable_txns(personal, 28)  # Personal care monthly
 
         # Travel is rare - only add a couple trips
         if days_in_range > 60:
@@ -388,7 +661,9 @@ class DemoDataProvider(DataAggregationProvider, IntegrationProvider):
                 transaction = Transaction(
                     id=uuid4(),
                     account_id=UUID(int=0),
-                    external_ids=MappingProxyType({"demo": f"demo-tx-{tx_counter:04d}"}),
+                    external_ids=MappingProxyType(
+                        {"demo": f"demo-tx-{tx_counter:04d}"}
+                    ),
                     amount=amount,
                     description=desc,
                     transaction_date=tx_date,
@@ -490,21 +765,93 @@ class DemoDataProvider(DataAggregationProvider, IntegrationProvider):
             # Income (tags match payroll transactions)
             ("income", "Salary", 8500, ["salary"], False, "positive"),
             # Expenses - calibrated for realistic mix of green/yellow/red
-            ("expense", "Housing", 2100, ["housing", "rent"], False, "negative"),  # ~100% (on budget)
-            ("expense", "Groceries", 2500, ["groceries"], False, "negative"),  # ~85% (green)
-            ("expense", "Dining", 1500, ["dining"], False, "negative"),  # ~120% (red - overspending)
-            ("expense", "Transportation", 500, ["transportation"], False, "negative"),  # ~70% (green)
-            ("expense", "Shopping", 1500, ["shopping"], False, "negative"),  # ~125% (red - overspending)
-            ("expense", "Entertainment", 250, ["entertainment", "subscriptions"], False, "negative"),  # ~130% (red)
-            ("expense", "Utilities", 350, ["utilities"], False, "negative"),  # ~85% (green)
-            ("expense", "Health", 300, ["health", "fitness"], False, "negative"),  # ~165% (red - need insurance?)
-            ("expense", "Insurance", 500, ["insurance"], False, "negative"),  # ~95% (green)
+            (
+                "expense",
+                "Housing",
+                2100,
+                ["housing", "rent"],
+                False,
+                "negative",
+            ),  # ~100% (on budget)
+            (
+                "expense",
+                "Groceries",
+                2500,
+                ["groceries"],
+                False,
+                "negative",
+            ),  # ~85% (green)
+            (
+                "expense",
+                "Dining",
+                1500,
+                ["dining"],
+                False,
+                "negative",
+            ),  # ~120% (red - overspending)
+            (
+                "expense",
+                "Transportation",
+                500,
+                ["transportation"],
+                False,
+                "negative",
+            ),  # ~70% (green)
+            (
+                "expense",
+                "Shopping",
+                1500,
+                ["shopping"],
+                False,
+                "negative",
+            ),  # ~125% (red - overspending)
+            (
+                "expense",
+                "Entertainment",
+                250,
+                ["entertainment", "subscriptions"],
+                False,
+                "negative",
+            ),  # ~130% (red)
+            (
+                "expense",
+                "Utilities",
+                350,
+                ["utilities"],
+                False,
+                "negative",
+            ),  # ~85% (green)
+            (
+                "expense",
+                "Health",
+                300,
+                ["health", "fitness"],
+                False,
+                "negative",
+            ),  # ~165% (red - need insurance?)
+            (
+                "expense",
+                "Insurance",
+                500,
+                ["insurance"],
+                False,
+                "negative",
+            ),  # ~95% (green)
         ]
 
         for month in months:
-            for i, (cat_type, name, expected, tags, require_all, amount_sign) in enumerate(categories):
+            for i, (
+                cat_type,
+                name,
+                expected,
+                tags,
+                require_all,
+                amount_sign,
+            ) in enumerate(categories):
                 cat_id = str(uuid4())
-                tags_sql = "[" + ", ".join(f"'{t}'" for t in tags) + "]" if tags else "[]"
+                tags_sql = (
+                    "[" + ", ".join(f"'{t}'" for t in tags) + "]" if tags else "[]"
+                )
                 amount_sign_sql = f"'{amount_sign}'" if amount_sign else "NULL"
 
                 sql_statements.append(f"""

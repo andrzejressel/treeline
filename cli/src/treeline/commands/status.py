@@ -28,7 +28,9 @@ def output_json(data: dict) -> None:
 
 def display_status(status: dict) -> None:
     """Display status using Rich formatting."""
-    console.print(f"\n[{theme.ui_header}]📊 Financial Data Status[/{theme.ui_header}]\n")
+    console.print(
+        f"\n[{theme.ui_header}]📊 Financial Data Status[/{theme.ui_header}]\n"
+    )
 
     # Display summary
     summary_table = Table(show_header=False, box=None, padding=(0, 2))

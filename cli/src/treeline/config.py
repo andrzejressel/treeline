@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 from typing import Any, Dict
-
+from typing import TypedDict, Optional, List
 from treeline.utils import get_treeline_dir
 
 
@@ -68,8 +68,6 @@ def set_demo_mode(enabled: bool) -> None:
 # =============================================================================
 # Import Profiles (named, reusable across accounts)
 # =============================================================================
-
-from typing import TypedDict, Optional, List
 
 
 class ImportProfileColumnMappings(TypedDict, total=False):

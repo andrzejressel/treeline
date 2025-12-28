@@ -34,7 +34,9 @@ class HealthReport:
 class DoctorService:
     """Service for database health checks and diagnostics."""
 
-    def __init__(self, repository: Repository, sync_service: "SyncService | None" = None):
+    def __init__(
+        self, repository: Repository, sync_service: "SyncService | None" = None
+    ):
         self.repository = repository
         self.sync_service = sync_service
 
@@ -327,9 +329,7 @@ class DoctorService:
         """
         total_result = await self.repository.execute_query(total_query)
         total = (
-            total_result.data.get("rows", [[0]])[0][0]
-            if total_result.success
-            else 0
+            total_result.data.get("rows", [[0]])[0][0] if total_result.success else 0
         )
 
         if count == 0:
@@ -634,12 +634,15 @@ class DoctorService:
         ]
 
         # Add summary as first detail
-        details.insert(0, {
-            "uncategorized_count": count if count < 50 else "50+",
-            "uncategorized_amount": total_amount,
-            "total_expense_count": total_count,
-            "total_expense_amount": total_expense_amount,
-        })
+        details.insert(
+            0,
+            {
+                "uncategorized_count": count if count < 50 else "50+",
+                "uncategorized_amount": total_amount,
+                "total_expense_count": total_count,
+                "total_expense_amount": total_expense_amount,
+            },
+        )
 
         # Get user's currency preference for formatting
         from treeline.app.preferences_service import (
@@ -700,18 +703,22 @@ class DoctorService:
             error = sync_result.get("error")
 
             if error:
-                issues.append({
-                    "integration": integration,
-                    "issue": "error",
-                    "message": error,
-                })
+                issues.append(
+                    {
+                        "integration": integration,
+                        "issue": "error",
+                        "message": error,
+                    }
+                )
             elif provider_warnings:
                 for warning in provider_warnings:
-                    issues.append({
-                        "integration": integration,
-                        "issue": "warning",
-                        "message": warning,
-                    })
+                    issues.append(
+                        {
+                            "integration": integration,
+                            "issue": "warning",
+                            "message": warning,
+                        }
+                    )
 
         if not issues:
             integration_count = len(sync_results)

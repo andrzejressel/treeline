@@ -117,9 +117,13 @@ def register(
                 f"  Saved:  {format_size(original_size - compacted_size)} ({reduction_pct:.1f}% reduction)"
             )
         else:
-            console.print(f"  [{theme.muted}]No space reclaimed (database was already compact)[/{theme.muted}]")
+            console.print(
+                f"  [{theme.muted}]No space reclaimed (database was already compact)[/{theme.muted}]"
+            )
 
         if backup_name:
-            console.print(f"\n  [{theme.muted}]Safety backup: {backup_name}[/{theme.muted}]")
+            console.print(
+                f"\n  [{theme.muted}]Safety backup: {backup_name}[/{theme.muted}]"
+            )
 
         console.print()

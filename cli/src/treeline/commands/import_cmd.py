@@ -14,7 +14,12 @@ from rich.table import Table
 
 from treeline.app.account_service import AccountService
 from treeline.app.import_service import ImportService
-from treeline.config import get_import_profile, save_import_profile, list_import_profiles, get_all_import_profiles
+from treeline.config import (
+    get_import_profile,
+    save_import_profile,
+    list_import_profiles,
+    get_all_import_profiles,
+)
 from treeline.domain import Account, Transaction
 from treeline.theme import get_theme
 
@@ -24,24 +29,52 @@ theme = get_theme()
 ACCOUNT_TYPES = ["depository", "credit", "investment", "loan", "other"]
 
 
-def register(app: typer.Typer, get_container: callable, ensure_initialized: callable) -> None:
+def register(
+    app: typer.Typer, get_container: callable, ensure_initialized: callable
+) -> None:
     """Register the import command with the app."""
 
     @app.command(name="import")
     def import_command(
-        file_path: str = typer.Argument(None, help="Path to CSV file (omit for interactive mode)"),
-        account_id: str = typer.Option(None, "--account-id", help="Account ID to import into"),
-        profile: str = typer.Option(None, "--profile", help="Use a saved import profile by name"),
-        date_column: str = typer.Option(None, "--date-column", help="CSV column name for date"),
-        amount_column: str = typer.Option(None, "--amount-column", help="CSV column name for amount"),
-        description_column: str = typer.Option(None, "--description-column", help="CSV column name for description"),
-        debit_column: str = typer.Option(None, "--debit-column", help="CSV column name for debits"),
-        credit_column: str = typer.Option(None, "--credit-column", help="CSV column name for credits"),
-        flip_signs: bool = typer.Option(False, "--flip-signs", help="Flip transaction signs (for credit cards)"),
-        debit_negative: bool = typer.Option(False, "--debit-negative", help="Negate debit amounts"),
-        preview: bool = typer.Option(False, "--preview", help="Preview only, don't import"),
-        save_profile_name: str = typer.Option(None, "--save-profile", help="Save settings as a named profile"),
-        show_profiles: bool = typer.Option(False, "--list-profiles", help="List saved import profiles"),
+        file_path: str = typer.Argument(
+            None, help="Path to CSV file (omit for interactive mode)"
+        ),
+        account_id: str = typer.Option(
+            None, "--account-id", help="Account ID to import into"
+        ),
+        profile: str = typer.Option(
+            None, "--profile", help="Use a saved import profile by name"
+        ),
+        date_column: str = typer.Option(
+            None, "--date-column", help="CSV column name for date"
+        ),
+        amount_column: str = typer.Option(
+            None, "--amount-column", help="CSV column name for amount"
+        ),
+        description_column: str = typer.Option(
+            None, "--description-column", help="CSV column name for description"
+        ),
+        debit_column: str = typer.Option(
+            None, "--debit-column", help="CSV column name for debits"
+        ),
+        credit_column: str = typer.Option(
+            None, "--credit-column", help="CSV column name for credits"
+        ),
+        flip_signs: bool = typer.Option(
+            False, "--flip-signs", help="Flip transaction signs (for credit cards)"
+        ),
+        debit_negative: bool = typer.Option(
+            False, "--debit-negative", help="Negate debit amounts"
+        ),
+        preview: bool = typer.Option(
+            False, "--preview", help="Preview only, don't import"
+        ),
+        save_profile_name: str = typer.Option(
+            None, "--save-profile", help="Save settings as a named profile"
+        ),
+        show_profiles: bool = typer.Option(
+            False, "--list-profiles", help="List saved import profiles"
+        ),
         json_output: bool = typer.Option(False, "--json", help="Output as JSON"),
     ) -> None:
         """Import transactions from CSV file.
@@ -67,14 +100,20 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
                 print(json_module.dumps(profiles, indent=2))
             elif not profiles:
                 console.print(f"[{theme.muted}]No saved profiles[/{theme.muted}]")
-                console.print(f"[{theme.muted}]Use --save-profile <name> after an import to create one[/{theme.muted}]")
+                console.print(
+                    f"[{theme.muted}]Use --save-profile <name> after an import to create one[/{theme.muted}]"
+                )
             else:
-                console.print(f"\n[{theme.ui_header}]Saved Import Profiles[/{theme.ui_header}]\n")
+                console.print(
+                    f"\n[{theme.ui_header}]Saved Import Profiles[/{theme.ui_header}]\n"
+                )
                 for name, prof in profiles.items():
                     mappings = prof.get("columnMappings", {})
                     options = prof.get("options", {})
                     console.print(f"  [{theme.info}]{name}[/{theme.info}]")
-                    console.print(f"    Columns: {', '.join(f'{k}={v}' for k, v in mappings.items())}")
+                    console.print(
+                        f"    Columns: {', '.join(f'{k}={v}' for k, v in mappings.items())}"
+                    )
                     if options.get("flipSigns") or options.get("debitNegative"):
                         opts = []
                         if options.get("flipSigns"):
@@ -96,11 +135,15 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
 
         preferences_service = container.preferences_service()
         currency_result = preferences_service.get_currency()
-        user_currency = currency_result.data if currency_result.success else DEFAULT_CURRENCY
+        user_currency = (
+            currency_result.data if currency_result.success else DEFAULT_CURRENCY
+        )
 
         # Interactive mode - collect parameters interactively
         if file_path is None:
-            params = _collect_params_interactive(import_service, account_service, user_currency)
+            params = _collect_params_interactive(
+                import_service, account_service, user_currency
+            )
             if params is None:
                 return  # User cancelled
 
@@ -114,21 +157,31 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
             # Scriptable mode - validate required params
             csv_path = Path(file_path).expanduser()
             if not csv_path.exists():
-                console.print(f"[{theme.error}]Error: File not found: {file_path}[/{theme.error}]")
+                console.print(
+                    f"[{theme.error}]Error: File not found: {file_path}[/{theme.error}]"
+                )
                 raise typer.Exit(1)
             file_path = str(csv_path)
 
             if not account_id:
-                console.print(f"[{theme.error}]Error: --account-id is required for scriptable import[/{theme.error}]")
-                console.print(f"[{theme.muted}]Run 'tl status --json' to see account IDs[/{theme.muted}]")
+                console.print(
+                    f"[{theme.error}]Error: --account-id is required for scriptable import[/{theme.error}]"
+                )
+                console.print(
+                    f"[{theme.muted}]Run 'tl status --json' to see account IDs[/{theme.muted}]"
+                )
                 raise typer.Exit(1)
 
             # If --profile specified, load it
             if profile:
                 saved_profile = get_import_profile(profile)
                 if not saved_profile:
-                    console.print(f"[{theme.error}]Error: Profile '{profile}' not found[/{theme.error}]")
-                    console.print(f"[{theme.muted}]Run 'tl import --list-profiles' to see available profiles[/{theme.muted}]")
+                    console.print(
+                        f"[{theme.error}]Error: Profile '{profile}' not found[/{theme.error}]"
+                    )
+                    console.print(
+                        f"[{theme.muted}]Run 'tl import --list-profiles' to see available profiles[/{theme.muted}]"
+                    )
                     raise typer.Exit(1)
                 column_mapping = saved_profile.get("columnMappings", {})
                 options = saved_profile.get("options", {})
@@ -138,39 +191,65 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
                 if not debit_negative and options.get("debitNegative"):
                     debit_negative = True
                 if not json_output:
-                    console.print(f"[{theme.success}]Using profile '{profile}'[/{theme.success}]")
+                    console.print(
+                        f"[{theme.success}]Using profile '{profile}'[/{theme.success}]"
+                    )
             else:
                 # Build column mapping from CLI args or auto-detect
                 column_mapping = _build_column_mapping(
-                    date_column, amount_column, description_column, debit_column, credit_column
+                    date_column,
+                    amount_column,
+                    description_column,
+                    debit_column,
+                    credit_column,
                 )
                 if not column_mapping:
-                    column_mapping = _detect_columns(import_service, file_path, json_output)
+                    column_mapping = _detect_columns(
+                        import_service, file_path, json_output
+                    )
                     if column_mapping is None:
                         raise typer.Exit(1)
 
         # Preview mode
         if preview:
-            _do_preview(import_service, file_path, column_mapping, flip_signs, debit_negative, json_output, user_currency)
+            _do_preview(
+                import_service,
+                file_path,
+                column_mapping,
+                flip_signs,
+                debit_negative,
+                json_output,
+                user_currency,
+            )
             return
 
         # Import mode
         account_uuid = UUID(account_id) if isinstance(account_id, str) else account_id
         _do_import(
-            import_service, file_path, account_uuid,
-            column_mapping, flip_signs, debit_negative, json_output
+            import_service,
+            file_path,
+            account_uuid,
+            column_mapping,
+            flip_signs,
+            debit_negative,
+            json_output,
         )
 
         # Save profile after successful import if requested
         if save_profile_name:
-            save_import_profile(save_profile_name, column_mapping, flip_signs, debit_negative)
+            save_import_profile(
+                save_profile_name, column_mapping, flip_signs, debit_negative
+            )
             if not json_output:
-                console.print(f"[{theme.success}]✓ Profile '{save_profile_name}' saved[/{theme.success}]")
+                console.print(
+                    f"[{theme.success}]✓ Profile '{save_profile_name}' saved[/{theme.success}]"
+                )
 
 
 # =============================================================================
 # Core import operations (shared by both modes)
 # =============================================================================
+
 
 def _detect_columns(
     import_service: ImportService, file_path: str, json_output: bool = False
@@ -178,12 +257,18 @@ def _detect_columns(
     """Auto-detect CSV columns. Returns None on failure."""
     if not json_output:
         with console.status(f"[{theme.status_loading}]Detecting CSV columns..."):
-            result = asyncio.run(import_service.detect_columns(source_type="csv", file_path=file_path))
+            result = asyncio.run(
+                import_service.detect_columns(source_type="csv", file_path=file_path)
+            )
     else:
-        result = asyncio.run(import_service.detect_columns(source_type="csv", file_path=file_path))
+        result = asyncio.run(
+            import_service.detect_columns(source_type="csv", file_path=file_path)
+        )
 
     if not result.success:
-        console.print(f"[{theme.error}]Error: Column detection failed: {result.error}[/{theme.error}]")
+        console.print(
+            f"[{theme.error}]Error: Column detection failed: {result.error}[/{theme.error}]"
+        )
         return None
     return result.data
 
@@ -210,7 +295,9 @@ def _do_preview(
     )
 
     if not preview_result.success:
-        console.print(f"[{theme.error}]Error: Preview failed: {preview_result.error}[/{theme.error}]")
+        console.print(
+            f"[{theme.error}]Error: Preview failed: {preview_result.error}[/{theme.error}]"
+        )
         raise typer.Exit(1)
 
     if json_output:
@@ -219,7 +306,11 @@ def _do_preview(
             "flip_signs": flip_signs,
             "debit_negative": debit_negative,
             "preview": [
-                {"date": str(tx.transaction_date), "description": tx.description, "amount": float(tx.amount)}
+                {
+                    "date": str(tx.transaction_date),
+                    "description": tx.description,
+                    "amount": float(tx.amount),
+                }
                 for tx in preview_result.data
             ],
         }
@@ -232,7 +323,9 @@ def _do_preview(
             console.print(f"Debit negative: {debit_negative}")
         console.print()
         _display_preview_table(preview_result.data[:10], currency)
-        console.print(f"\n[{theme.muted}]Remove --preview flag to import[/{theme.muted}]\n")
+        console.print(
+            f"\n[{theme.muted}]Remove --preview flag to import[/{theme.muted}]\n"
+        )
 
 
 def _do_import(
@@ -257,7 +350,9 @@ def _do_import(
         with console.status(f"[{theme.status_loading}]Importing transactions..."):
             result = asyncio.run(
                 import_service.import_transactions(
-                    source_type="csv", account_id=account_id, source_options=source_options
+                    source_type="csv",
+                    account_id=account_id,
+                    source_options=source_options,
                 )
             )
     else:
@@ -285,8 +380,11 @@ def _do_import(
 # Interactive parameter collection
 # =============================================================================
 
+
 def _collect_params_interactive(
-    import_service: ImportService, account_service: AccountService, currency: str = "USD"
+    import_service: ImportService,
+    account_service: AccountService,
+    currency: str = "USD",
 ) -> Optional[Dict[str, Any]]:
     """Interactively collect all parameters needed for import.
 
@@ -310,14 +408,18 @@ def _collect_params_interactive(
     expanded_path = os.path.expanduser(file_path)
     csv_path = Path(expanded_path)
     if not csv_path.exists():
-        console.print(f"[{theme.error}]Error: File not found: {file_path}[/{theme.error}]\n")
+        console.print(
+            f"[{theme.error}]Error: File not found: {file_path}[/{theme.error}]\n"
+        )
         return None
 
     # 2. Get account selection
     console.print(f"\n[{theme.muted}]Fetching accounts...[/{theme.muted}]")
     accounts_result = asyncio.run(account_service.get_accounts())
     if not accounts_result.success:
-        console.print(f"[{theme.error}]Error fetching accounts: {accounts_result.error}[/{theme.error}]\n")
+        console.print(
+            f"[{theme.error}]Error fetching accounts: {accounts_result.error}[/{theme.error}]\n"
+        )
         return None
 
     account_id = _prompt_account_selection(accounts_result.data or [])
@@ -342,11 +444,15 @@ def _collect_params_interactive(
             )
         )
         if not create_result.success:
-            console.print(f"[{theme.error}]Error creating account: {create_result.error}[/{theme.error}]\n")
+            console.print(
+                f"[{theme.error}]Error creating account: {create_result.error}[/{theme.error}]\n"
+            )
             return None
 
         account_id = create_result.data.id
-        console.print(f"[{theme.success}]✓ Created account '{account_details['name']}' ({account_details['account_type']})[/{theme.success}]")
+        console.print(
+            f"[{theme.success}]✓ Created account '{account_details['name']}' ({account_details['account_type']})[/{theme.success}]"
+        )
 
     # 3. Check if user wants to use a saved profile
     available_profiles = list_import_profiles()
@@ -355,11 +461,13 @@ def _collect_params_interactive(
     debit_negative = False
 
     if available_profiles:
-        console.print(f"\n[{theme.info}]Available profiles: {', '.join(available_profiles)}[/{theme.info}]")
+        console.print(
+            f"\n[{theme.info}]Available profiles: {', '.join(available_profiles)}[/{theme.info}]"
+        )
         try:
             use_profile = Prompt.ask(
                 f"[{theme.info}]Use a saved profile? (enter name or press Enter to skip)[/{theme.info}]",
-                default=""
+                default="",
             )
         except (KeyboardInterrupt, EOFError):
             console.print(f"\n[{theme.warning}]Import cancelled[/{theme.warning}]\n")
@@ -372,16 +480,24 @@ def _collect_params_interactive(
                 options = saved_profile.get("options", {})
                 flip_signs = options.get("flipSigns", False)
                 debit_negative = options.get("debitNegative", False)
-                console.print(f"[{theme.success}]Using profile '{use_profile}'[/{theme.success}]")
+                console.print(
+                    f"[{theme.success}]Using profile '{use_profile}'[/{theme.success}]"
+                )
             else:
-                console.print(f"[{theme.warning}]Profile '{use_profile}' not found, auto-detecting...[/{theme.warning}]")
+                console.print(
+                    f"[{theme.warning}]Profile '{use_profile}' not found, auto-detecting...[/{theme.warning}]"
+                )
 
     # 4. Auto-detect columns if no profile used
     if not column_mapping:
         console.print(f"\n[{theme.muted}]Detecting CSV columns...[/{theme.muted}]")
-        detect_result = asyncio.run(import_service.detect_columns(source_type="csv", file_path=str(csv_path)))
+        detect_result = asyncio.run(
+            import_service.detect_columns(source_type="csv", file_path=str(csv_path))
+        )
         if not detect_result.success:
-            console.print(f"[{theme.error}]Error detecting columns: {detect_result.error}[/{theme.error}]\n")
+            console.print(
+                f"[{theme.error}]Error detecting columns: {detect_result.error}[/{theme.error}]\n"
+            )
             return None
 
         column_mapping = detect_result.data
@@ -390,10 +506,18 @@ def _collect_params_interactive(
             console.print(f"  {field}: {column}")
 
     # Validate columns
-    if not column_mapping.get("date") or (not column_mapping.get("amount") and not column_mapping.get("debit")):
-        console.print(f"\n[{theme.warning}]Warning: Required columns not detected![/{theme.warning}]")
-        console.print(f"[{theme.muted}]For manual column mapping, use scriptable mode:[/{theme.muted}]")
-        console.print(f'[{theme.muted}]  tl import {csv_path.name} --date-column "YourDateColumn" --amount-column "YourAmountColumn"[/{theme.muted}]\n')
+    if not column_mapping.get("date") or (
+        not column_mapping.get("amount") and not column_mapping.get("debit")
+    ):
+        console.print(
+            f"\n[{theme.warning}]Warning: Required columns not detected![/{theme.warning}]"
+        )
+        console.print(
+            f"[{theme.muted}]For manual column mapping, use scriptable mode:[/{theme.muted}]"
+        )
+        console.print(
+            f'[{theme.muted}]  tl import {csv_path.name} --date-column "YourDateColumn" --amount-column "YourAmountColumn"[/{theme.muted}]\n'
+        )
         return None
 
     # 5. Interactive preview loop to confirm/adjust sign settings
@@ -408,7 +532,7 @@ def _collect_params_interactive(
     try:
         save_name = Prompt.ask(
             f"\n[{theme.info}]Save as profile? (enter name or press Enter to skip)[/{theme.info}]",
-            default=""
+            default="",
         )
         if save_name.strip():
             save_profile_name = save_name.strip()
@@ -453,25 +577,39 @@ def _interactive_preview_loop(
         )
 
         if not preview_result.success:
-            console.print(f"[{theme.error}]Error: {preview_result.error}[/{theme.error}]\n")
+            console.print(
+                f"[{theme.error}]Error: {preview_result.error}[/{theme.error}]\n"
+            )
             return None, None
 
         preview_txs = preview_result.data
         if len(preview_txs) == 0:
-            console.print(f"\n[{theme.error}]No transactions found in CSV![/{theme.error}]")
+            console.print(
+                f"\n[{theme.error}]No transactions found in CSV![/{theme.error}]"
+            )
             console.print(f"[{theme.muted}]This could mean:[/{theme.muted}]")
             console.print("  - The CSV has no data rows")
             console.print("  - Date or amount parsing failed")
-            console.print(f"\n[{theme.muted}]Try scriptable mode with explicit columns:[/{theme.muted}]")
-            console.print(f'[{theme.muted}]  tl import file.csv --preview --date-column "YourDateColumn" --amount-column "YourAmountColumn"[/{theme.muted}]\n')
+            console.print(
+                f"\n[{theme.muted}]Try scriptable mode with explicit columns:[/{theme.muted}]"
+            )
+            console.print(
+                f'[{theme.muted}]  tl import file.csv --preview --date-column "YourDateColumn" --amount-column "YourAmountColumn"[/{theme.muted}]\n'
+            )
             return None, None
 
         if show_initial_preview:
-            console.print(f"\n[{theme.ui_header}]Preview - First 5 Transactions:[/{theme.ui_header}]\n")
+            console.print(
+                f"\n[{theme.ui_header}]Preview - First 5 Transactions:[/{theme.ui_header}]\n"
+            )
             _display_preview_table(preview_txs[:5])
-            console.print(f"\n[{theme.muted}]({len(preview_txs)} total transactions in file)[/{theme.muted}]")
+            console.print(
+                f"\n[{theme.muted}]({len(preview_txs)} total transactions in file)[/{theme.muted}]"
+            )
             console.print(f"[{theme.ui_header}]Preview Check[/{theme.ui_header}]")
-            console.print(f"[{theme.muted}]Spending should appear as NEGATIVE ({theme.negative_amount}), income/refunds as POSITIVE ({theme.positive_amount})[/{theme.muted}]\n")
+            console.print(
+                f"[{theme.muted}]Spending should appear as NEGATIVE ({theme.negative_amount}), income/refunds as POSITIVE ({theme.positive_amount})[/{theme.muted}]\n"
+            )
 
         console.print(f"[{theme.info}]What would you like to do?[/{theme.info}]")
         console.print("  [1] Proceed with import")
@@ -482,7 +620,11 @@ def _interactive_preview_loop(
         console.print(f"[{theme.muted}](Press Ctrl+C to cancel)[/{theme.muted}]")
 
         try:
-            choice = Prompt.ask(f"\n[{theme.info}]Choice[/{theme.info}]", choices=["1", "2", "3", "4", "5"], default="1")
+            choice = Prompt.ask(
+                f"\n[{theme.info}]Choice[/{theme.info}]",
+                choices=["1", "2", "3", "4", "5"],
+                default="1",
+            )
         except (KeyboardInterrupt, EOFError):
             console.print(f"\n[{theme.warning}]Import cancelled[/{theme.warning}]\n")
             return None, None
@@ -490,17 +632,23 @@ def _interactive_preview_loop(
         if choice == "1":
             return flip_signs, debit_negative
         elif choice == "2":
-            console.print(f"\n[{theme.ui_header}]Extended Preview - First 15 Transactions:[/{theme.ui_header}]\n")
+            console.print(
+                f"\n[{theme.ui_header}]Extended Preview - First 15 Transactions:[/{theme.ui_header}]\n"
+            )
             _display_preview_table(preview_txs[:15])
             console.print()
             show_initial_preview = False
         elif choice == "3":
             flip_signs = not flip_signs
-            console.print(f"[{theme.muted}]Signs flipped, regenerating preview...[/{theme.muted}]")
+            console.print(
+                f"[{theme.muted}]Signs flipped, regenerating preview...[/{theme.muted}]"
+            )
             show_initial_preview = True
         elif choice == "4":
             debit_negative = not debit_negative
-            console.print(f"[{theme.muted}]Debit negation {'enabled' if debit_negative else 'disabled'}, regenerating preview...[/{theme.muted}]")
+            console.print(
+                f"[{theme.muted}]Debit negation {'enabled' if debit_negative else 'disabled'}, regenerating preview...[/{theme.muted}]"
+            )
             show_initial_preview = True
         else:
             console.print(f"[{theme.warning}]Import cancelled[/{theme.warning}]\n")
@@ -510,6 +658,7 @@ def _interactive_preview_loop(
 # =============================================================================
 # Helper functions
 # =============================================================================
+
 
 def _build_column_mapping(
     date_column: Optional[str],
@@ -536,7 +685,9 @@ def _build_column_mapping(
     return mapping
 
 
-def _display_preview_table(transactions: List[Transaction], currency: str = "USD") -> None:
+def _display_preview_table(
+    transactions: List[Transaction], currency: str = "USD"
+) -> None:
     """Display transaction preview table."""
     from treeline.app.preferences_service import format_currency
 
@@ -587,22 +738,33 @@ def _prompt_account_selection(accounts: List[Account]) -> Optional[UUID | str]:
     console.print(f"[{theme.muted}](Press Ctrl+C to cancel)[/{theme.muted}]\n")
 
     if not accounts:
-        console.print(f"[{theme.muted}]No accounts found. Let's create one.[/{theme.muted}]")
+        console.print(
+            f"[{theme.muted}]No accounts found. Let's create one.[/{theme.muted}]"
+        )
         try:
-            Prompt.ask(f"\n[{theme.info}]Press Enter to continue[/{theme.info}]", default="")
+            Prompt.ask(
+                f"\n[{theme.info}]Press Enter to continue[/{theme.info}]", default=""
+            )
             return "CREATE_NEW"
         except (KeyboardInterrupt, EOFError):
             return None
 
     for i, account in enumerate(accounts, 1):
-        institution = f" - {account.institution_name}" if account.institution_name else ""
-        account_type_display = f" ({account.account_type})" if account.account_type else ""
+        institution = (
+            f" - {account.institution_name}" if account.institution_name else ""
+        )
+        account_type_display = (
+            f" ({account.account_type})" if account.account_type else ""
+        )
         console.print(f"  [{i}] {account.name}{institution}{account_type_display}")
 
     console.print("  [c] Create new account")
 
     try:
-        choice = Prompt.ask(f"\n[{theme.info}]Choose account (1-{len(accounts)} or 'c' to create)[/{theme.info}]", default="1")
+        choice = Prompt.ask(
+            f"\n[{theme.info}]Choose account (1-{len(accounts)} or 'c' to create)[/{theme.info}]",
+            default="1",
+        )
     except (KeyboardInterrupt, EOFError):
         return None
 
@@ -627,16 +789,24 @@ def _prompt_create_account() -> Optional[Dict[str, Any]]:
     try:
         account_name = Prompt.ask(f"[{theme.info}]Account name[/{theme.info}]")
         if not account_name.strip():
-            console.print(f"[{theme.error}]Account name cannot be empty[/{theme.error}]")
+            console.print(
+                f"[{theme.error}]Account name cannot be empty[/{theme.error}]"
+            )
             return None
 
-        institution = Prompt.ask(f"[{theme.info}]Institution (optional, press Enter to skip)[/{theme.info}]", default="")
+        institution = Prompt.ask(
+            f"[{theme.info}]Institution (optional, press Enter to skip)[/{theme.info}]",
+            default="",
+        )
 
         console.print(f"\n[{theme.info}]Account type:[/{theme.info}]")
         for i, acc_type in enumerate(ACCOUNT_TYPES, 1):
             console.print(f"  [{i}] {acc_type}")
 
-        type_choice = Prompt.ask(f"[{theme.info}]Choose account type (1-{len(ACCOUNT_TYPES)})[/{theme.info}]", default="1")
+        type_choice = Prompt.ask(
+            f"[{theme.info}]Choose account type (1-{len(ACCOUNT_TYPES)})[/{theme.info}]",
+            default="1",
+        )
 
         try:
             type_idx = int(type_choice) - 1
@@ -649,7 +819,9 @@ def _prompt_create_account() -> Optional[Dict[str, Any]]:
             console.print(f"[{theme.error}]Invalid account type[/{theme.error}]")
             return None
 
-        currency = Prompt.ask(f"[{theme.info}]Currency[/{theme.info}]", default="USD").upper()
+        currency = Prompt.ask(
+            f"[{theme.info}]Currency[/{theme.info}]", default="USD"
+        ).upper()
 
         return {
             "name": account_name.strip(),

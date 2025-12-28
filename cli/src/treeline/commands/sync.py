@@ -36,17 +36,25 @@ def display_error(error: str, show_log_hint: bool = True) -> None:
 
 def display_sync_result(data: dict, dry_run: bool = False) -> None:
     """Display sync results using Rich formatting."""
-    header = "Synchronizing Financial Data (DRY RUN)" if dry_run else "Synchronizing Financial Data"
+    header = (
+        "Synchronizing Financial Data (DRY RUN)"
+        if dry_run
+        else "Synchronizing Financial Data"
+    )
     console.print(f"\n[{theme.ui_header}]{header}[/{theme.ui_header}]\n")
 
     for sync_result in data["results"]:
         integration_name = sync_result["integration"]
-        console.print(f"[{theme.emphasis}]Syncing {integration_name}...[/{theme.emphasis}]")
+        console.print(
+            f"[{theme.emphasis}]Syncing {integration_name}...[/{theme.emphasis}]"
+        )
 
         if "error" in sync_result:
             console.print(f"[{theme.error}]  ✗ {sync_result['error']}[/{theme.error}]")
             log_file = get_log_file_path()
-            console.print(f"[{theme.muted}]    See {log_file} for details[/{theme.muted}]")
+            console.print(
+                f"[{theme.muted}]    See {log_file} for details[/{theme.muted}]"
+            )
             continue
 
         console.print(
@@ -69,10 +77,16 @@ def display_sync_result(data: dict, dry_run: bool = False) -> None:
             new = tx_stats.get("new", 0)
             skipped = tx_stats.get("skipped", 0)
 
-            console.print(f"[{theme.success}]  ✓[/{theme.success}] Transaction breakdown:")
-            console.print(f"[{theme.muted}]    Discovered: {discovered}[/{theme.muted}]")
+            console.print(
+                f"[{theme.success}]  ✓[/{theme.success}] Transaction breakdown:"
+            )
+            console.print(
+                f"[{theme.muted}]    Discovered: {discovered}[/{theme.muted}]"
+            )
             console.print(f"[{theme.muted}]    New: {new}[/{theme.muted}]")
-            console.print(f"[{theme.muted}]    Skipped: {skipped} (already exists)[/{theme.muted}]")
+            console.print(
+                f"[{theme.muted}]    Skipped: {skipped} (already exists)[/{theme.muted}]"
+            )
         else:
             console.print(
                 f"[{theme.success}]  ✓[/{theme.success}] Synced {sync_result['transactions_synced']} transaction(s)"
@@ -85,7 +99,9 @@ def display_sync_result(data: dict, dry_run: bool = False) -> None:
         # Display provider warnings
         provider_warnings = sync_result.get("provider_warnings", [])
         if provider_warnings:
-            console.print(f"\n[{theme.warning}]  ⚠ SimpleFIN warnings:[/{theme.warning}]")
+            console.print(
+                f"\n[{theme.warning}]  ⚠ SimpleFIN warnings:[/{theme.warning}]"
+            )
             for warning in provider_warnings:
                 console.print(f"[{theme.warning}]    • {warning}[/{theme.warning}]")
             console.print(
@@ -96,13 +112,19 @@ def display_sync_result(data: dict, dry_run: bool = False) -> None:
         console.print(
             f"\n[{theme.warning}]⚠[/{theme.warning}] Dry run completed - no changes were made\n"
         )
-        console.print(f"[{theme.muted}]Run without --dry-run to apply these changes[/{theme.muted}]\n")
+        console.print(
+            f"[{theme.muted}]Run without --dry-run to apply these changes[/{theme.muted}]\n"
+        )
     else:
         console.print(f"\n[{theme.success}]✓[/{theme.success}] Sync completed!\n")
-        console.print(f"[{theme.muted}]Use 'tl status' to see your updated data[/{theme.muted}]\n")
+        console.print(
+            f"[{theme.muted}]Use 'tl status' to see your updated data[/{theme.muted}]\n"
+        )
 
 
-def register(app: typer.Typer, get_container: callable, ensure_initialized: callable) -> None:
+def register(
+    app: typer.Typer, get_container: callable, ensure_initialized: callable
+) -> None:
     """Register the sync command with the app."""
 
     @app.command(name="sync")
@@ -128,9 +150,15 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
 
         # Sync all integrations with visual feedback
         if not json_output:
-            status_msg = "Syncing integrations (dry-run)..." if dry_run else "Syncing integrations..."
+            status_msg = (
+                "Syncing integrations (dry-run)..."
+                if dry_run
+                else "Syncing integrations..."
+            )
             with console.status(f"[{theme.status_loading}]{status_msg}"):
-                result = asyncio.run(sync_service.sync_all_integrations(dry_run=dry_run))
+                result = asyncio.run(
+                    sync_service.sync_all_integrations(dry_run=dry_run)
+                )
         else:
             result = asyncio.run(sync_service.sync_all_integrations(dry_run=dry_run))
 

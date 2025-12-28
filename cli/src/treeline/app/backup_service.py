@@ -63,7 +63,9 @@ class BackupService:
                         f"Failed to delete old backup {backup.name}: {delete_result.error}"
                     )
                 else:
-                    logger.info(f"Deleted old backup to maintain retention: {backup.name}")
+                    logger.info(
+                        f"Deleted old backup to maintain retention: {backup.name}"
+                    )
 
         # Create new backup
         return await self.storage.create_backup(self.db_path)

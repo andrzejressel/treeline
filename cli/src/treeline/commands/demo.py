@@ -20,6 +20,7 @@ theme = get_theme()
 # Scenario Abstraction
 # =============================================================================
 
+
 class DemoScenarioBase(ABC):
     """Abstract base class for demo scenarios.
 
@@ -95,16 +96,22 @@ class DefaultScenario(DemoScenarioBase):
         demo_provider = container.get_integration_provider("demo")
 
         if not has_demo:
-            asyncio.run(integration_service.create_integration(demo_provider, "demo", {}))
+            asyncio.run(
+                integration_service.create_integration(demo_provider, "demo", {})
+            )
 
         # Sync demo accounts and transactions
         sync_service = container.sync_service()
         console.print(f"[{theme.muted}]Syncing demo data...[/{theme.muted}]")
-        with console.status(f"[{theme.status_loading}]Syncing demo accounts and transactions..."):
+        with console.status(
+            f"[{theme.status_loading}]Syncing demo accounts and transactions..."
+        ):
             result = asyncio.run(sync_service.sync_all_integrations())
 
         if result.success:
-            console.print(f"[{theme.success}]Demo data synced successfully![/{theme.success}]")
+            console.print(
+                f"[{theme.success}]Demo data synced successfully![/{theme.success}]"
+            )
         else:
             console.print(f"[{theme.warning}]Note: {result.error}[/{theme.warning}]")
 
@@ -121,14 +128,24 @@ class DefaultScenario(DemoScenarioBase):
                     account_id_map[demo_id] = str(account.id)
 
             if account_id_map:
-                with console.status(f"[{theme.status_loading}]Generating balance history..."):
-                    balance_sql = demo_provider.generate_demo_balance_history_sql(account_id_map)
-                    balance_result = asyncio.run(db_service.execute_write_query(balance_sql))
+                with console.status(
+                    f"[{theme.status_loading}]Generating balance history..."
+                ):
+                    balance_sql = demo_provider.generate_demo_balance_history_sql(
+                        account_id_map
+                    )
+                    balance_result = asyncio.run(
+                        db_service.execute_write_query(balance_sql)
+                    )
 
                 if balance_result.success:
-                    console.print(f"[{theme.success}]Created balance history for {len(account_id_map)} accounts[/{theme.success}]")
+                    console.print(
+                        f"[{theme.success}]Created balance history for {len(account_id_map)} accounts[/{theme.success}]"
+                    )
                 else:
-                    console.print(f"[{theme.warning}]Note: {balance_result.error}[/{theme.warning}]")
+                    console.print(
+                        f"[{theme.warning}]Note: {balance_result.error}[/{theme.warning}]"
+                    )
 
         # Seed budget categories
         with console.status(f"[{theme.status_loading}]Setting up demo budget..."):
@@ -138,7 +155,9 @@ class DefaultScenario(DemoScenarioBase):
         if budget_result.success:
             console.print(f"[{theme.success}]Demo budget configured[/{theme.success}]")
         else:
-            console.print(f"[{theme.warning}]Note: {budget_result.error}[/{theme.warning}]")
+            console.print(
+                f"[{theme.warning}]Note: {budget_result.error}[/{theme.warning}]"
+            )
 
 
 # =============================================================================
@@ -160,6 +179,7 @@ SCENARIOS: Dict[str, DemoScenarioBase] = {
 
 class ScenarioChoice(str, Enum):
     """Enum for CLI scenario choices (auto-generated from registry)."""
+
     DEFAULT = "default"
     EMPTY = "empty"
 
@@ -172,7 +192,9 @@ def _build_scenario_help() -> str:
     return "\n".join(lines)
 
 
-def register(app: typer.Typer, get_container: callable, ensure_initialized: callable) -> None:
+def register(
+    app: typer.Typer, get_container: callable, ensure_initialized: callable
+) -> None:
     """Register the demo command with the app."""
 
     @app.command(name="demo")
@@ -182,7 +204,8 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
         ),
         scenario: ScenarioChoice = typer.Option(
             ScenarioChoice.DEFAULT,
-            "--scenario", "-s",
+            "--scenario",
+            "-s",
             help="Demo scenario to use",
             case_sensitive=False,
         ),
@@ -215,14 +238,18 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
             # Look up scenario from registry
             scenario_impl = SCENARIOS.get(scenario.value)
             if not scenario_impl:
-                console.print(f"[{theme.error}]Unknown scenario: {scenario.value}[/{theme.error}]")
+                console.print(
+                    f"[{theme.error}]Unknown scenario: {scenario.value}[/{theme.error}]"
+                )
                 raise typer.Exit(1)
             _enable_demo(get_container, ensure_initialized, scenario_impl)
         elif action_lower == "off":
             _disable_demo()
         else:
             console.print(f"[{theme.error}]Unknown action: {action}[/{theme.error}]")
-            console.print(f"[{theme.muted}]Use 'on', 'off', or 'status'[/{theme.muted}]")
+            console.print(
+                f"[{theme.muted}]Use 'on', 'off', or 'status'[/{theme.muted}]"
+            )
             raise typer.Exit(1)
 
 
@@ -230,12 +257,20 @@ def _show_status() -> None:
     """Show current demo mode status."""
     if is_demo_mode():
         console.print(f"\n[{theme.warning}]Demo mode is ON[/{theme.warning}]")
-        console.print(f"[{theme.muted}]Using demo.duckdb with sample data[/{theme.muted}]")
-        console.print(f"[{theme.muted}]Run 'tl demo off' to switch to real data[/{theme.muted}]\n")
+        console.print(
+            f"[{theme.muted}]Using demo.duckdb with sample data[/{theme.muted}]"
+        )
+        console.print(
+            f"[{theme.muted}]Run 'tl demo off' to switch to real data[/{theme.muted}]\n"
+        )
     else:
         console.print(f"\n[{theme.success}]Demo mode is OFF[/{theme.success}]")
-        console.print(f"[{theme.muted}]Using treeline.duckdb with real data[/{theme.muted}]")
-        console.print(f"[{theme.muted}]Run 'tl demo on' to try demo mode[/{theme.muted}]\n")
+        console.print(
+            f"[{theme.muted}]Using treeline.duckdb with real data[/{theme.muted}]"
+        )
+        console.print(
+            f"[{theme.muted}]Run 'tl demo on' to try demo mode[/{theme.muted}]\n"
+        )
 
 
 def _delete_demo_database() -> None:
@@ -249,7 +284,9 @@ def _delete_demo_database() -> None:
             wal_path.unlink()
 
 
-def _enable_demo(get_container: callable, ensure_initialized: callable, scenario: DemoScenarioBase) -> None:
+def _enable_demo(
+    get_container: callable, ensure_initialized: callable, scenario: DemoScenarioBase
+) -> None:
     """Enable demo mode with specified scenario.
 
     Args:
@@ -264,10 +301,13 @@ def _enable_demo(get_container: callable, ensure_initialized: callable, scenario
 
     # Reset container to pick up new database
     from treeline.cli import reset_container
+
     reset_container()
 
     console.print(f"\n[{theme.success}]Demo mode enabled[/{theme.success}]")
-    console.print(f"[{theme.muted}]Scenario: {scenario.name} - {scenario.description}[/{theme.muted}]")
+    console.print(
+        f"[{theme.muted}]Scenario: {scenario.name} - {scenario.description}[/{theme.muted}]"
+    )
 
     # Initialize demo database (runs migrations)
     ensure_initialized()
@@ -275,7 +315,9 @@ def _enable_demo(get_container: callable, ensure_initialized: callable, scenario
     # Delegate to scenario for setup - no if/else needed
     scenario.setup(get_container)
 
-    console.print(f"\n[{theme.muted}]Run 'tl demo off' to return to real data[/{theme.muted}]\n")
+    console.print(
+        f"\n[{theme.muted}]Run 'tl demo off' to return to real data[/{theme.muted}]\n"
+    )
 
 
 def _disable_demo() -> None:
@@ -286,5 +328,7 @@ def _disable_demo() -> None:
 
     set_demo_mode(False)
     console.print(f"\n[{theme.success}]Demo mode disabled[/{theme.success}]")
-    console.print(f"[{theme.muted}]Now using treeline.duckdb with real data[/{theme.muted}]")
+    console.print(
+        f"[{theme.muted}]Now using treeline.duckdb with real data[/{theme.muted}]"
+    )
     console.print(f"[{theme.muted}]Run 'tl status' to see your data[/{theme.muted}]\n")

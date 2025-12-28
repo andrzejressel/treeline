@@ -8,7 +8,23 @@ from dotenv import load_dotenv
 from rich.console import Console
 
 from treeline.app.container import Container
-from treeline.commands import backfill, backup, compact, demo, doctor, encrypt, import_cmd, new, plugin, query, remove, setup, status, sync, tag
+from treeline.commands import (
+    backfill,
+    backup,
+    compact,
+    demo,
+    doctor,
+    encrypt,
+    import_cmd,
+    new,
+    plugin,
+    query,
+    remove,
+    setup,
+    status,
+    sync,
+    tag,
+)
 from treeline.config import is_demo_mode
 from treeline.theme import get_theme
 from treeline.utils import get_treeline_dir
@@ -21,6 +37,7 @@ def get_version() -> str:
     """Get the version from package metadata."""
     try:
         from importlib.metadata import version
+
         return version("treeline-money")
     except Exception:
         return "0.1.0"
@@ -63,6 +80,7 @@ _container: Container | None = None
 def _password_callback() -> str:
     """Interactive password prompt for encrypted databases."""
     from rich.prompt import Prompt
+
     return Prompt.ask("Enter database password", password=True)
 
 
@@ -97,7 +115,9 @@ def ensure_treeline_initialized() -> bool:
 
     result = asyncio.run(db_service.initialize_db())
     if not result.success:
-        console.print(f"[{theme.error}]Error initializing database: {result.error}[/{theme.error}]")
+        console.print(
+            f"[{theme.error}]Error initializing database: {result.error}[/{theme.error}]"
+        )
         sys.exit(1)
 
     return needs_init

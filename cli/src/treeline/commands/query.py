@@ -61,7 +61,9 @@ def display_query_result(columns: list[str], rows: list[list]) -> None:
     )
 
 
-def register(app: typer.Typer, get_container: callable, ensure_initialized: callable) -> None:
+def register(
+    app: typer.Typer, get_container: callable, ensure_initialized: callable
+) -> None:
     """Register the query command with the app."""
 
     @app.command(name="query")

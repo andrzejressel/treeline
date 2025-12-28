@@ -274,4 +274,3 @@ class Repository(ABC):
             Result containing count of transactions updated
         """
         pass
-

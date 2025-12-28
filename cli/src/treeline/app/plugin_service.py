@@ -549,19 +549,17 @@ class PluginService:
                 response.raise_for_status()
                 manifest = response.json()
         except httpx.RequestError as e:
-            return Result(
-                success=False, error=f"Failed to download manifest.json: {e}"
-            )
+            return Result(success=False, error=f"Failed to download manifest.json: {e}")
         except json.JSONDecodeError as e:
-            return Result(
-                success=False, error=f"Failed to parse manifest.json: {e}"
-            )
+            return Result(success=False, error=f"Failed to parse manifest.json: {e}")
 
         return Result(
             success=True,
             data={
                 "manifest": manifest,
-                "version": release_data.get("tag_name", manifest.get("version", "unknown")),
+                "version": release_data.get(
+                    "tag_name", manifest.get("version", "unknown")
+                ),
                 "source": f"github:{owner}/{repo}",
             },
         )

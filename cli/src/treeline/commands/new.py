@@ -25,7 +25,9 @@ def display_error(error: str, show_log_hint: bool = True) -> None:
         console.print(f"[{theme.muted}]See {log_file} for details[/{theme.muted}]")
 
 
-def register(app: typer.Typer, get_container: callable, ensure_initialized: callable) -> None:
+def register(
+    app: typer.Typer, get_container: callable, ensure_initialized: callable
+) -> None:
     """Register the new command with the app."""
 
     @app.command(name="new")
@@ -81,14 +83,18 @@ def _create_balance_snapshot(
             account_id = UUID(account_id_str)
         except ValueError:
             display_error(f"Invalid account ID: {account_id_str}")
-            console.print(f"[{theme.muted}]Account ID must be a valid UUID[/{theme.muted}]\n")
+            console.print(
+                f"[{theme.muted}]Account ID must be a valid UUID[/{theme.muted}]\n"
+            )
             raise typer.Exit(1)
 
         try:
             balance = Decimal(balance_str)
         except Exception:
             display_error(f"Invalid balance amount: {balance_str}")
-            console.print(f"[{theme.muted}]Balance must be a valid number[/{theme.muted}]\n")
+            console.print(
+                f"[{theme.muted}]Balance must be a valid number[/{theme.muted}]\n"
+            )
             raise typer.Exit(1)
 
         snapshot_date = None
@@ -97,12 +103,16 @@ def _create_balance_snapshot(
                 snapshot_date = date.fromisoformat(date_str)
             except ValueError:
                 display_error(f"Invalid date format: {date_str}")
-                console.print(f"[{theme.muted}]Date must be in YYYY-MM-DD format[/{theme.muted}]\n")
+                console.print(
+                    f"[{theme.muted}]Date must be in YYYY-MM-DD format[/{theme.muted}]\n"
+                )
                 raise typer.Exit(1)
 
     else:
         # INTERACTIVE MODE
-        console.print(f"\n[{theme.ui_header}]Add Balance Snapshot[/{theme.ui_header}]\n")
+        console.print(
+            f"\n[{theme.ui_header}]Add Balance Snapshot[/{theme.ui_header}]\n"
+        )
 
         accounts_result = asyncio.run(account_service.get_accounts())
         if not accounts_result.success:
@@ -113,7 +123,9 @@ def _create_balance_snapshot(
 
         if not accounts:
             display_error("No accounts found. Please create an account first.")
-            console.print(f"[{theme.muted}]Use 'tl import' or 'tl sync' to add accounts[/{theme.muted}]\n")
+            console.print(
+                f"[{theme.muted}]Use 'tl import' or 'tl sync' to add accounts[/{theme.muted}]\n"
+            )
             raise typer.Exit(1)
 
         account_id = _prompt_account_selection(accounts)
@@ -123,7 +135,9 @@ def _create_balance_snapshot(
             raise typer.Exit(0)
 
         try:
-            balance_input = Prompt.ask(f"\n[{theme.info}]Enter balance amount[/{theme.info}]")
+            balance_input = Prompt.ask(
+                f"\n[{theme.info}]Enter balance amount[/{theme.info}]"
+            )
             balance = Decimal(balance_input)
         except (KeyboardInterrupt, EOFError):
             console.print(f"\n[{theme.warning}]Cancelled[/{theme.warning}]\n")
@@ -143,7 +157,9 @@ def _create_balance_snapshot(
                 snapshot_date = date.fromisoformat(date_input)
             except ValueError:
                 display_error(f"Invalid date format: {date_input}")
-                console.print(f"[{theme.muted}]Using today's date instead[/{theme.muted}]")
+                console.print(
+                    f"[{theme.muted}]Using today's date instead[/{theme.muted}]"
+                )
                 snapshot_date = None
 
     # Add the balance snapshot via service

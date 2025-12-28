@@ -10,7 +10,9 @@ import tempfile
 from pathlib import Path
 
 
-def run_cli(args: list[str], treeline_dir: str, input_text: str | None = None) -> subprocess.CompletedProcess:
+def run_cli(
+    args: list[str], treeline_dir: str, input_text: str | None = None
+) -> subprocess.CompletedProcess:
     """Run treeline CLI command with specified treeline directory.
 
     Args:
@@ -131,8 +133,9 @@ class TestDoctorCommand:
 
             for check_name, check_data in data["checks"].items():
                 status = check_data["status"]
-                assert status in ("pass", "warning", "error"), \
+                assert status in ("pass", "warning", "error"), (
                     f"Invalid status '{status}' for check {check_name}"
+                )
 
     def test_doctor_exit_code_on_healthy_db(self):
         """Test that doctor returns 0 when database is healthy."""

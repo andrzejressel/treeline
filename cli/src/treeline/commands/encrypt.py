@@ -168,10 +168,14 @@ def _do_status(get_container: callable, json_output: bool) -> None:
         console.print(f"  Version: {status.version}\n")
     else:
         console.print(f"\n[{theme.muted}]Database is not encrypted[/{theme.muted}]")
-        console.print(f"  [{theme.info}]Use 'tl encrypt' to enable encryption[/{theme.info}]\n")
+        console.print(
+            f"  [{theme.info}]Use 'tl encrypt' to enable encryption[/{theme.info}]\n"
+        )
 
 
-def _do_encrypt(get_container: callable, password: str | None, json_output: bool) -> None:
+def _do_encrypt(
+    get_container: callable, password: str | None, json_output: bool
+) -> None:
     """Enable encryption."""
     container = get_container()
     encryption_service = container.encryption_service()
@@ -182,7 +186,9 @@ def _do_encrypt(get_container: callable, password: str | None, json_output: bool
         if json_output:
             print(json_module.dumps({"error": "Database is already encrypted"}))
         else:
-            console.print(f"[{theme.warning}]Database is already encrypted[/{theme.warning}]")
+            console.print(
+                f"[{theme.warning}]Database is already encrypted[/{theme.warning}]"
+            )
         raise typer.Exit(1)
 
     # Get password from option, env var, or interactive prompt
@@ -190,11 +196,15 @@ def _do_encrypt(get_container: callable, password: str | None, json_output: bool
         password = os.environ.get("TL_DB_PASSWORD")
 
     if not password and not json_output:
-        console.print(f"\n[{theme.ui_header}]Enable Database Encryption[/{theme.ui_header}]\n")
+        console.print(
+            f"\n[{theme.ui_header}]Enable Database Encryption[/{theme.ui_header}]\n"
+        )
         console.print(
             f"[{theme.warning}]WARNING: If you forget your password, your data cannot be recovered![/{theme.warning}]"
         )
-        console.print(f"[{theme.muted}]A backup will be created before encryption.[/{theme.muted}]\n")
+        console.print(
+            f"[{theme.muted}]A backup will be created before encryption.[/{theme.muted}]\n"
+        )
 
         try:
             password = Prompt.ask("Enter encryption password", password=True)
@@ -251,15 +261,21 @@ def _do_encrypt(get_container: callable, password: str | None, json_output: bool
             )
         )
     else:
-        console.print(f"\n[{theme.success}]Database encrypted successfully[/{theme.success}]")
+        console.print(
+            f"\n[{theme.success}]Database encrypted successfully[/{theme.success}]"
+        )
         if backup_name:
-            console.print(f"  [{theme.muted}]Safety backup: {backup_name}[/{theme.muted}]")
+            console.print(
+                f"  [{theme.muted}]Safety backup: {backup_name}[/{theme.muted}]"
+            )
         console.print(
             f"\n[{theme.info}]Remember your password - it cannot be recovered![/{theme.info}]\n"
         )
 
 
-def _do_decrypt(get_container: callable, password: str | None, json_output: bool) -> None:
+def _do_decrypt(
+    get_container: callable, password: str | None, json_output: bool
+) -> None:
     """Disable encryption."""
     container = get_container()
     encryption_service = container.encryption_service()
@@ -270,7 +286,9 @@ def _do_decrypt(get_container: callable, password: str | None, json_output: bool
         if json_output:
             print(json_module.dumps({"error": "Database is not encrypted"}))
         else:
-            console.print(f"[{theme.warning}]Database is not encrypted[/{theme.warning}]")
+            console.print(
+                f"[{theme.warning}]Database is not encrypted[/{theme.warning}]"
+            )
         raise typer.Exit(1)
 
     # Get password from option, env var, or interactive prompt
@@ -278,7 +296,9 @@ def _do_decrypt(get_container: callable, password: str | None, json_output: bool
         password = os.environ.get("TL_DB_PASSWORD")
 
     if not password and not json_output:
-        console.print(f"\n[{theme.ui_header}]Disable Database Encryption[/{theme.ui_header}]\n")
+        console.print(
+            f"\n[{theme.ui_header}]Disable Database Encryption[/{theme.ui_header}]\n"
+        )
         try:
             password = Prompt.ask("Enter current password", password=True)
         except (KeyboardInterrupt, EOFError):
@@ -321,7 +341,11 @@ def _do_decrypt(get_container: callable, password: str | None, json_output: bool
             )
         )
     else:
-        console.print(f"\n[{theme.success}]Database decrypted successfully[/{theme.success}]")
+        console.print(
+            f"\n[{theme.success}]Database decrypted successfully[/{theme.success}]"
+        )
         if backup_name:
-            console.print(f"  [{theme.muted}]Safety backup: {backup_name}[/{theme.muted}]")
+            console.print(
+                f"  [{theme.muted}]Safety backup: {backup_name}[/{theme.muted}]"
+            )
         console.print()

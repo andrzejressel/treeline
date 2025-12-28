@@ -111,7 +111,9 @@ def register(
 
 def display_report(report, verbose: bool, currency: str) -> None:
     """Display health report in human-readable format."""
-    console.print(f"\n[{theme.ui_header}]🩺 Database Health Check[/{theme.ui_header}]\n")
+    console.print(
+        f"\n[{theme.ui_header}]🩺 Database Health Check[/{theme.ui_header}]\n"
+    )
 
     # Display each check
     for check in report.checks:
@@ -122,10 +124,14 @@ def display_report(report, verbose: bool, currency: str) -> None:
     summary_parts = []
 
     if report.passed > 0:
-        summary_parts.append(f"[{theme.success}]{report.passed} passed[/{theme.success}]")
+        summary_parts.append(
+            f"[{theme.success}]{report.passed} passed[/{theme.success}]"
+        )
 
     if report.warnings > 0:
-        summary_parts.append(f"[{theme.warning}]{report.warnings} warning(s)[/{theme.warning}]")
+        summary_parts.append(
+            f"[{theme.warning}]{report.warnings} warning(s)[/{theme.warning}]"
+        )
 
     if report.errors > 0:
         summary_parts.append(f"[{theme.error}]{report.errors} error(s)[/{theme.error}]")
@@ -133,7 +139,9 @@ def display_report(report, verbose: bool, currency: str) -> None:
     console.print(f"Summary: {', '.join(summary_parts)}")
 
     if not verbose and (report.warnings > 0 or report.errors > 0):
-        console.print(f"\n[{theme.muted}]Run with --verbose to see details[/{theme.muted}]")
+        console.print(
+            f"\n[{theme.muted}]Run with --verbose to see details[/{theme.muted}]"
+        )
 
     console.print()
 
@@ -156,7 +164,9 @@ def display_check(check, verbose: bool, currency: str) -> None:
     display_name = check.name.replace("_", " ").title()
 
     # Main line
-    console.print(f"[{color}]{icon}[/{color}] {display_name:<24} [{theme.muted}]{check.message}[/{theme.muted}]")
+    console.print(
+        f"[{color}]{icon}[/{color}] {display_name:<24} [{theme.muted}]{check.message}[/{theme.muted}]"
+    )
 
     # Details in verbose mode
     if verbose and check.details:
@@ -170,54 +180,84 @@ def display_details(check, show_all: bool = True, currency: str = "USD") -> None
     details_to_show = check.details if show_all else check.details[:5]
     for detail in details_to_show:
         if check.name == "orphaned_transactions":
-            console.print(f"    [{theme.muted}]txn {detail['transaction_id'][:8]}... → account {detail['account_id'][:8]}...[/{theme.muted}]")
+            console.print(
+                f"    [{theme.muted}]txn {detail['transaction_id'][:8]}... → account {detail['account_id'][:8]}...[/{theme.muted}]"
+            )
 
         elif check.name == "orphaned_snapshots":
-            console.print(f"    [{theme.muted}]snapshot {detail['snapshot_id'][:8]}... → account {detail['account_id'][:8]}...[/{theme.muted}]")
+            console.print(
+                f"    [{theme.muted}]snapshot {detail['snapshot_id'][:8]}... → account {detail['account_id'][:8]}...[/{theme.muted}]"
+            )
 
         elif check.name == "duplicate_fingerprints":
-            console.print(f"    [{theme.muted}]Fingerprint {detail['fingerprint']} ({detail['duplicate_count']} copies):[/{theme.muted}]")
+            console.print(
+                f"    [{theme.muted}]Fingerprint {detail['fingerprint']} ({detail['duplicate_count']} copies):[/{theme.muted}]"
+            )
             for txn in detail.get("transactions", [])[:3]:
-                amount = txn['amount'] if txn['amount'] is not None else 0
-                desc = (txn['description'] or "")[:30]
-                console.print(f"      [{theme.muted}]{txn['date']}  {format_currency(amount, currency)}  {desc}[/{theme.muted}]")
+                amount = txn["amount"] if txn["amount"] is not None else 0
+                desc = (txn["description"] or "")[:30]
+                console.print(
+                    f"      [{theme.muted}]{txn['date']}  {format_currency(amount, currency)}  {desc}[/{theme.muted}]"
+                )
 
         elif check.name == "date_sanity":
-            amount = detail['amount'] if detail['amount'] is not None else 0
-            desc = (detail['description'] or "")[:30]
-            console.print(f"    [{theme.muted}]{detail['date']}  {format_currency(amount, currency)}  {desc}[/{theme.muted}]")
+            amount = detail["amount"] if detail["amount"] is not None else 0
+            desc = (detail["description"] or "")[:30]
+            console.print(
+                f"    [{theme.muted}]{detail['date']}  {format_currency(amount, currency)}  {desc}[/{theme.muted}]"
+            )
 
         elif check.name == "untagged_transactions":
-            console.print(f"    [{theme.muted}]{detail['untagged_count']} of {detail['total_count']} transactions untagged[/{theme.muted}]")
+            console.print(
+                f"    [{theme.muted}]{detail['untagged_count']} of {detail['total_count']} transactions untagged[/{theme.muted}]"
+            )
 
         elif check.name == "budget_double_counting":
-            amount = detail['amount'] if detail['amount'] is not None else 0
-            desc = (detail['description'] or "")[:30]
-            matches = detail.get('category_matches', 0)
-            tags = detail.get('tags', [])
-            tag_str = ", ".join(tags[:3]) + ("..." if len(tags) > 3 else "") if tags else "no tags"
-            console.print(f"    [{theme.muted}]{detail['date']}  {format_currency(abs(amount), currency)}  {desc}  ({matches} categories, tags: {tag_str})[/{theme.muted}]")
+            amount = detail["amount"] if detail["amount"] is not None else 0
+            desc = (detail["description"] or "")[:30]
+            matches = detail.get("category_matches", 0)
+            tags = detail.get("tags", [])
+            tag_str = (
+                ", ".join(tags[:3]) + ("..." if len(tags) > 3 else "")
+                if tags
+                else "no tags"
+            )
+            console.print(
+                f"    [{theme.muted}]{detail['date']}  {format_currency(abs(amount), currency)}  {desc}  ({matches} categories, tags: {tag_str})[/{theme.muted}]"
+            )
 
         elif check.name == "uncategorized_expenses":
             # First item is summary
             if "uncategorized_count" in detail:
-                uncategorized = detail.get('uncategorized_count', 0)
-                uncategorized_amt = detail.get('uncategorized_amount', 0)
-                total = detail.get('total_expense_count', 0)
-                total_amt = detail.get('total_expense_amount', 0)
-                console.print(f"    [{theme.muted}]{uncategorized} of {total} expenses ({format_currency(uncategorized_amt, currency)} of {format_currency(total_amt, currency)})[/{theme.muted}]")
+                uncategorized = detail.get("uncategorized_count", 0)
+                uncategorized_amt = detail.get("uncategorized_amount", 0)
+                total = detail.get("total_expense_count", 0)
+                total_amt = detail.get("total_expense_amount", 0)
+                console.print(
+                    f"    [{theme.muted}]{uncategorized} of {total} expenses ({format_currency(uncategorized_amt, currency)} of {format_currency(total_amt, currency)})[/{theme.muted}]"
+                )
             else:
                 # Individual transaction
-                amount = detail['amount'] if detail['amount'] is not None else 0
-                desc = (detail['description'] or "")[:30]
-                tags = detail.get('tags', [])
-                tag_str = ", ".join(tags[:3]) + ("..." if len(tags) > 3 else "") if tags else "no tags"
-                console.print(f"    [{theme.muted}]{detail['date']}  {format_currency(abs(amount), currency)}  {desc}  (tags: {tag_str})[/{theme.muted}]")
+                amount = detail["amount"] if detail["amount"] is not None else 0
+                desc = (detail["description"] or "")[:30]
+                tags = detail.get("tags", [])
+                tag_str = (
+                    ", ".join(tags[:3]) + ("..." if len(tags) > 3 else "")
+                    if tags
+                    else "no tags"
+                )
+                console.print(
+                    f"    [{theme.muted}]{detail['date']}  {format_currency(abs(amount), currency)}  {desc}  (tags: {tag_str})[/{theme.muted}]"
+                )
 
         elif check.name == "integration_connectivity":
             integration = detail.get("integration", "unknown")
             message = detail.get("message", "Unknown issue")
-            console.print(f"    [{theme.muted}]{integration}: {message}[/{theme.muted}]")
+            console.print(
+                f"    [{theme.muted}]{integration}: {message}[/{theme.muted}]"
+            )
 
     if not show_all and check.details and len(check.details) > 5:
-        console.print(f"    [{theme.muted}]... and {len(check.details) - 5} more[/{theme.muted}]")
+        console.print(
+            f"    [{theme.muted}]... and {len(check.details) - 5} more[/{theme.muted}]"
+        )

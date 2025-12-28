@@ -78,7 +78,9 @@ class SyncService:
 
         # Currency validation: filter accounts by user's configured currency
         user_currency_result = self.preferences_service.get_currency()
-        user_currency = user_currency_result.data if user_currency_result.success else "USD"
+        user_currency = (
+            user_currency_result.data if user_currency_result.success else "USD"
+        )
 
         currency_warnings = []
         currency_filtered_accounts = []

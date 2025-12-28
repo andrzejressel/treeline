@@ -296,7 +296,9 @@ class DuckDBRepository(Repository):
                         transaction.created_at,
                         transaction.updated_at,
                         transaction.deleted_at,
-                        str(transaction.parent_transaction_id) if transaction.parent_transaction_id else None,
+                        str(transaction.parent_transaction_id)
+                        if transaction.parent_transaction_id
+                        else None,
                     ],
                 )
 
@@ -481,8 +483,12 @@ class DuckDBRepository(Repository):
                         tags=tuple(row_dict["tags"]) if row_dict["tags"] else tuple(),
                         created_at=self._ensure_timezone(row_dict["created_at"]),
                         updated_at=self._ensure_timezone(row_dict["updated_at"]),
-                        deleted_at=self._ensure_timezone(row_dict["deleted_at"]) if row_dict.get("deleted_at") else None,
-                        parent_transaction_id=UUID(row_dict["parent_transaction_id"]) if row_dict.get("parent_transaction_id") else None,
+                        deleted_at=self._ensure_timezone(row_dict["deleted_at"])
+                        if row_dict.get("deleted_at")
+                        else None,
+                        parent_transaction_id=UUID(row_dict["parent_transaction_id"])
+                        if row_dict.get("parent_transaction_id")
+                        else None,
                     )
                     transactions.append(transaction)
 
@@ -1011,12 +1017,14 @@ class DuckDBRepository(Repository):
 
             rules = []
             for row in result:
-                rules.append({
-                    "rule_id": row[0],
-                    "name": row[1],
-                    "sql_condition": row[2],
-                    "tags": list(row[3]) if row[3] else [],
-                })
+                rules.append(
+                    {
+                        "rule_id": row[0],
+                        "name": row[1],
+                        "sql_condition": row[2],
+                        "tags": list(row[3]) if row[3] else [],
+                    }
+                )
 
             conn.close()
             return Ok(rules)
@@ -1130,10 +1138,12 @@ class DuckDBRepository(Repository):
                     # Replace original with compacted version
                     shutil.move(str(temp_db_path), str(self.db_path))
 
-                    return Ok({
-                        "original_size": original_size,
-                        "compacted_size": compacted_size,
-                    })
+                    return Ok(
+                        {
+                            "original_size": original_size,
+                            "compacted_size": compacted_size,
+                        }
+                    )
 
                 except Exception as e:
                     # Clean up temp db file on error
@@ -1143,4 +1153,3 @@ class DuckDBRepository(Repository):
 
         except Exception as e:
             return Fail(f"Failed to compact database: {str(e)}")
-

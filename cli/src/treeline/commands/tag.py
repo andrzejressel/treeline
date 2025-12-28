@@ -36,7 +36,9 @@ def display_error(error: str, show_log_hint: bool = True) -> None:
         console.print(f"[{theme.muted}]See {log_file} for details[/{theme.muted}]")
 
 
-def register(app: typer.Typer, get_container: callable, ensure_initialized: callable) -> None:
+def register(
+    app: typer.Typer, get_container: callable, ensure_initialized: callable
+) -> None:
     """Register the tag command with the app."""
 
     @app.command(name="tag")
@@ -82,9 +84,13 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
 
             # Support both newline-separated and comma-separated IDs
             if "\n" in stdin_input:
-                transaction_ids = [tid.strip() for tid in stdin_input.split("\n") if tid.strip()]
+                transaction_ids = [
+                    tid.strip() for tid in stdin_input.split("\n") if tid.strip()
+                ]
             else:
-                transaction_ids = [tid.strip() for tid in stdin_input.split(",") if tid.strip()]
+                transaction_ids = [
+                    tid.strip() for tid in stdin_input.split(",") if tid.strip()
+                ]
 
         if not transaction_ids:
             display_error("No transaction IDs provided")
@@ -108,11 +114,13 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
             try:
                 transaction_id = UUID(transaction_id_str)
             except ValueError:
-                errors.append({
-                    "transaction_id": transaction_id_str,
-                    "error": f"Invalid UUID: {transaction_id_str}",
-                    "success": False,
-                })
+                errors.append(
+                    {
+                        "transaction_id": transaction_id_str,
+                        "error": f"Invalid UUID: {transaction_id_str}",
+                        "success": False,
+                    }
+                )
                 continue
 
             # Determine final tag list (merge or replace)
@@ -136,37 +144,47 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
             )
 
             if result.success:
-                results.append({
-                    "transaction_id": transaction_id_str,
-                    "tags": final_tags,
-                    "success": True,
-                })
+                results.append(
+                    {
+                        "transaction_id": transaction_id_str,
+                        "tags": final_tags,
+                        "success": True,
+                    }
+                )
             else:
-                errors.append({
-                    "transaction_id": transaction_id_str,
-                    "error": result.error,
-                    "success": False,
-                })
+                errors.append(
+                    {
+                        "transaction_id": transaction_id_str,
+                        "error": result.error,
+                        "success": False,
+                    }
+                )
 
         if json_output:
-            output_json({
-                "succeeded": len(results),
-                "failed": len(errors),
-                "results": results + errors,
-            })
+            output_json(
+                {
+                    "succeeded": len(results),
+                    "failed": len(errors),
+                    "results": results + errors,
+                }
+            )
         else:
             if results:
                 console.print(
                     f"\n[{theme.success}]✓ Successfully tagged {len(results)} transaction(s)[/{theme.success}]"
                 )
-                console.print(f"[{theme.muted}]Tags applied: {', '.join(tag_list)}[/{theme.muted}]\n")
+                console.print(
+                    f"[{theme.muted}]Tags applied: {', '.join(tag_list)}[/{theme.muted}]\n"
+                )
 
             if errors:
                 console.print(
                     f"[{theme.error}]✗ Failed to tag {len(errors)} transaction(s)[/{theme.error}]"
                 )
                 for error in errors:
-                    console.print(f"[{theme.muted}]  {error['transaction_id']}: {error['error']}[/{theme.muted}]")
+                    console.print(
+                        f"[{theme.muted}]  {error['transaction_id']}: {error['error']}[/{theme.muted}]"
+                    )
                 console.print()
 
             if errors:

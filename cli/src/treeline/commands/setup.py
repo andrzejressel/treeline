@@ -22,13 +22,16 @@ def display_error(error: str, show_log_hint: bool = True) -> None:
         console.print(f"[{theme.muted}]See {log_file} for details[/{theme.muted}]")
 
 
-def register(app: typer.Typer, get_container: callable, ensure_initialized: callable) -> None:
+def register(
+    app: typer.Typer, get_container: callable, ensure_initialized: callable
+) -> None:
     """Register the setup command with the app."""
 
     @app.command(name="setup")
     def setup_command(
         integration: str = typer.Argument(
-            None, help="Integration name (e.g., 'simplefin'). Omit for interactive wizard."
+            None,
+            help="Integration name (e.g., 'simplefin'). Omit for interactive wizard.",
         ),
         token: str = typer.Option(
             None, "--token", help="Setup token (optional, will prompt if not provided)"
@@ -52,14 +55,20 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
 
         if integration is None:
             # Interactive wizard
-            console.print(f"\n[{theme.ui_header}]Integration Setup[/{theme.ui_header}]\n")
+            console.print(
+                f"\n[{theme.ui_header}]Integration Setup[/{theme.ui_header}]\n"
+            )
             console.print(f"[{theme.info}]Available integrations:[/{theme.info}]")
             console.print(f"  [{theme.emphasis}]1[/{theme.emphasis}] - SimpleFIN")
             console.print(f"  [{theme.emphasis}]2[/{theme.emphasis}] - Cancel\n")
-            console.print(f"[{theme.muted}]Tip: Use 'tl demo on' to try with sample data[/{theme.muted}]\n")
+            console.print(
+                f"[{theme.muted}]Tip: Use 'tl demo on' to try with sample data[/{theme.muted}]\n"
+            )
 
             try:
-                choice = Prompt.ask("Select integration", choices=["1", "2"], default="1")
+                choice = Prompt.ask(
+                    "Select integration", choices=["1", "2"], default="1"
+                )
             except (KeyboardInterrupt, EOFError):
                 console.print(f"\n[{theme.warning}]Setup cancelled[/{theme.warning}]\n")
                 raise typer.Exit(0)
@@ -85,12 +94,18 @@ def register(app: typer.Typer, get_container: callable, ensure_initialized: call
             _setup_simplefin(get_container, token)
         elif integration_lower == "demo":
             # Redirect to demo command
-            console.print(f"[{theme.info}]Demo is now a mode, not an integration.[/{theme.info}]")
-            console.print(f"[{theme.muted}]Use 'tl demo on' to enable demo mode[/{theme.muted}]\n")
+            console.print(
+                f"[{theme.info}]Demo is now a mode, not an integration.[/{theme.info}]"
+            )
+            console.print(
+                f"[{theme.muted}]Use 'tl demo on' to enable demo mode[/{theme.muted}]\n"
+            )
             raise typer.Exit(0)
         else:
             display_error(f"Unknown integration: {integration}", show_log_hint=False)
-            console.print(f"[{theme.muted}]Supported integrations: simplefin[/{theme.muted}]")
+            console.print(
+                f"[{theme.muted}]Supported integrations: simplefin[/{theme.muted}]"
+            )
             raise typer.Exit(1)
 
 
@@ -127,7 +142,9 @@ def _setup_simplefin(get_container: callable, token: str | None = None) -> None:
 
     # Setup integration
     console.print()
-    with console.status(f"[{theme.status_loading}]Verifying token and setting up integration..."):
+    with console.status(
+        f"[{theme.status_loading}]Verifying token and setting up integration..."
+    ):
         result = asyncio.run(
             integration_service.create_integration(
                 simplefin_provider, "simplefin", {"setupToken": setup_token}
@@ -138,5 +155,9 @@ def _setup_simplefin(get_container: callable, token: str | None = None) -> None:
         display_error(f"Setup failed: {result.error}")
         raise typer.Exit(1)
 
-    console.print(f"[{theme.success}]✓[/{theme.success}] SimpleFIN integration setup successfully!\n")
-    console.print(f"[{theme.muted}]Use 'tl sync' to import your transactions[/{theme.muted}]\n")
+    console.print(
+        f"[{theme.success}]✓[/{theme.success}] SimpleFIN integration setup successfully!\n"
+    )
+    console.print(
+        f"[{theme.muted}]Use 'tl sync' to import your transactions[/{theme.muted}]\n"
+    )

@@ -79,9 +79,7 @@ def register(
         elif action == "clear":
             _do_clear(container, force, json_output)
         else:
-            console.print(
-                f"[{theme.error}]Unknown action: {action}[/{theme.error}]"
-            )
+            console.print(f"[{theme.error}]Unknown action: {action}[/{theme.error}]")
             console.print(
                 f"[{theme.muted}]Valid actions: create, list, restore, clear[/{theme.muted}]"
             )
@@ -126,7 +124,9 @@ def _do_create(container, max_backups: int, json_output: bool) -> None:
         console.print(f"\n[{theme.success}]Backup created[/{theme.success}]")
         console.print(f"  Name: {backup.name}")
         console.print(f"  Size: {size_str}")
-        console.print(f"  Time: {backup.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}\n")
+        console.print(
+            f"  Time: {backup.created_at.strftime('%Y-%m-%d %H:%M:%S UTC')}\n"
+        )
 
 
 def _do_list(container, json_output: bool) -> None:
@@ -163,7 +163,9 @@ def _do_list(container, json_output: bool) -> None:
         console.print(f"\n[{theme.muted}]No backups found[/{theme.muted}]\n")
         return
 
-    console.print(f"\n[{theme.ui_header}]Backups[/{theme.ui_header}] ({len(backups)} total)\n")
+    console.print(
+        f"\n[{theme.ui_header}]Backups[/{theme.ui_header}] ({len(backups)} total)\n"
+    )
 
     table = Table(show_header=True, box=None, padding=(0, 2))
     table.add_column("#", width=3, justify="right")
@@ -209,10 +211,14 @@ def _do_restore(
 
         backups = list_result.data or []
         if not backups:
-            console.print(f"\n[{theme.warning}]No backups available to restore[/{theme.warning}]\n")
+            console.print(
+                f"\n[{theme.warning}]No backups available to restore[/{theme.warning}]\n"
+            )
             raise typer.Exit(1)
 
-        console.print(f"\n[{theme.ui_header}]Select a backup to restore:[/{theme.ui_header}]\n")
+        console.print(
+            f"\n[{theme.ui_header}]Select a backup to restore:[/{theme.ui_header}]\n"
+        )
 
         for i, backup in enumerate(backups, 1):
             size_kb = backup.size_bytes / 1024
@@ -275,7 +281,9 @@ def _do_restore(
     if json_output:
         print(json_module.dumps({"restored": backup_name}))
     else:
-        console.print(f"\n[{theme.success}]Database restored from {backup_name}[/{theme.success}]\n")
+        console.print(
+            f"\n[{theme.success}]Database restored from {backup_name}[/{theme.success}]\n"
+        )
 
 
 def _do_clear(container, force: bool, json_output: bool) -> None:

@@ -232,7 +232,9 @@ class EncryptionService:
             )
             # Use the attached database and query its tables
             test_conn.execute("USE enc")
-            test_conn.execute("SELECT table_name FROM information_schema.tables LIMIT 1")
+            test_conn.execute(
+                "SELECT table_name FROM information_schema.tables LIMIT 1"
+            )
             test_conn.close()
         except Exception as e:
             logger.debug(f"Password verification failed: {e}")
@@ -282,7 +284,9 @@ class EncryptionService:
                 # Remove encryption metadata
                 delete_result = self._delete_metadata()
                 if not delete_result.success:
-                    logger.warning(f"Failed to delete encryption metadata: {delete_result.error}")
+                    logger.warning(
+                        f"Failed to delete encryption metadata: {delete_result.error}"
+                    )
 
                 return Ok({"backup_name": backup_name})
 

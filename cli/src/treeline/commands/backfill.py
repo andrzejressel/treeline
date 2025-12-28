@@ -22,7 +22,9 @@ def display_error(error: str, show_log_hint: bool = True) -> None:
         console.print(f"[{theme.muted}]See {log_file} for details[/{theme.muted}]")
 
 
-def register(app: typer.Typer, get_container: callable, ensure_initialized: callable) -> None:
+def register(
+    app: typer.Typer, get_container: callable, ensure_initialized: callable
+) -> None:
     """Register the backfill command with the app."""
 
     @app.command(name="backfill")
@@ -87,11 +89,15 @@ def _backfill_balances(
     backfill_service = container.backfill_service()
 
     # Parse account IDs
-    account_ids = [UUID(id_str) for id_str in account_ids_str] if account_ids_str else None
+    account_ids = (
+        [UUID(id_str) for id_str in account_ids_str] if account_ids_str else None
+    )
 
     # Show dry-run indicator
     if dry_run:
-        console.print(f"[{theme.warning}]DRY RUN - No changes will be saved[/{theme.warning}]\n")
+        console.print(
+            f"[{theme.warning}]DRY RUN - No changes will be saved[/{theme.warning}]\n"
+        )
 
     # Run backfill
     with console.status("[bold]Backfilling balance snapshots..."):
@@ -124,4 +130,6 @@ def _backfill_balances(
     console.print(f"  Snapshots skipped: {data['snapshots_skipped']}")
 
     if dry_run:
-        console.print(f"\n[{theme.warning}]DRY RUN - No changes were saved[/{theme.warning}]")
+        console.print(
+            f"\n[{theme.warning}]DRY RUN - No changes were saved[/{theme.warning}]"
+        )

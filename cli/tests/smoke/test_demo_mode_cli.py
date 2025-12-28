@@ -13,7 +13,9 @@ import tempfile
 from pathlib import Path
 
 
-def run_cli(args: list[str], treeline_dir: str, input_text: str | None = None) -> subprocess.CompletedProcess:
+def run_cli(
+    args: list[str], treeline_dir: str, input_text: str | None = None
+) -> subprocess.CompletedProcess:
     """Run treeline CLI command with specified treeline directory.
 
     Args:
@@ -118,7 +120,9 @@ class TestSyncCommand:
             run_cli(["demo", "on"], tmpdir)
             result = run_cli(["sync"], tmpdir)
             assert result.returncode == 0
-            assert "Sync completed" in result.stdout or "synced" in result.stdout.lower()
+            assert (
+                "Sync completed" in result.stdout or "synced" in result.stdout.lower()
+            )
 
     def test_sync_json_output(self):
         """Test that sync --json returns valid JSON."""
@@ -146,14 +150,18 @@ class TestQueryCommand:
         """Test basic query for transaction count."""
         with tempfile.TemporaryDirectory() as tmpdir:
             run_cli(["demo", "on"], tmpdir)
-            result = run_cli(["query", "SELECT COUNT(*) as total FROM transactions"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT COUNT(*) as total FROM transactions"], tmpdir
+            )
             assert result.returncode == 0
 
     def test_query_json_output(self):
         """Test that query --json returns valid JSON with expected structure."""
         with tempfile.TemporaryDirectory() as tmpdir:
             run_cli(["demo", "on"], tmpdir)
-            result = run_cli(["query", "SELECT * FROM transactions LIMIT 3", "--json"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT * FROM transactions LIMIT 3", "--json"], tmpdir
+            )
             assert result.returncode == 0
 
             data = json.loads(result.stdout)
@@ -165,7 +173,15 @@ class TestQueryCommand:
         """Test that query --format csv returns CSV."""
         with tempfile.TemporaryDirectory() as tmpdir:
             run_cli(["demo", "on"], tmpdir)
-            result = run_cli(["query", "SELECT transaction_id, amount FROM transactions LIMIT 3", "--format", "csv"], tmpdir)
+            result = run_cli(
+                [
+                    "query",
+                    "SELECT transaction_id, amount FROM transactions LIMIT 3",
+                    "--format",
+                    "csv",
+                ],
+                tmpdir,
+            )
             assert result.returncode == 0
             # CSV should have comma-separated values
             assert "," in result.stdout
@@ -174,7 +190,9 @@ class TestQueryCommand:
         """Test querying accounts table."""
         with tempfile.TemporaryDirectory() as tmpdir:
             run_cli(["demo", "on"], tmpdir)
-            result = run_cli(["query", "SELECT account_id, name FROM accounts", "--json"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT account_id, name FROM accounts", "--json"], tmpdir
+            )
             assert result.returncode == 0
 
             data = json.loads(result.stdout)
@@ -197,7 +215,10 @@ class TestTagCommand:
             run_cli(["demo", "on"], tmpdir)
 
             # Get a transaction ID
-            result = run_cli(["query", "SELECT transaction_id FROM transactions LIMIT 1", "--json"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT transaction_id FROM transactions LIMIT 1", "--json"],
+                tmpdir,
+            )
             data = json.loads(result.stdout)
             tx_id = data["rows"][0][0]
 
@@ -206,7 +227,14 @@ class TestTagCommand:
             assert result.returncode == 0
 
             # Verify tag was applied
-            result = run_cli(["query", f"SELECT tags FROM transactions WHERE transaction_id = '{tx_id}'", "--json"], tmpdir)
+            result = run_cli(
+                [
+                    "query",
+                    f"SELECT tags FROM transactions WHERE transaction_id = '{tx_id}'",
+                    "--json",
+                ],
+                tmpdir,
+            )
             data = json.loads(result.stdout)
             assert "test-tag" in str(data["rows"][0][0])
 
@@ -216,16 +244,28 @@ class TestTagCommand:
             run_cli(["demo", "on"], tmpdir)
 
             # Get a transaction ID
-            result = run_cli(["query", "SELECT transaction_id FROM transactions LIMIT 1", "--json"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT transaction_id FROM transactions LIMIT 1", "--json"],
+                tmpdir,
+            )
             data = json.loads(result.stdout)
             tx_id = data["rows"][0][0]
 
             # Apply multiple tags
-            result = run_cli(["tag", "food,groceries,essentials", "--ids", tx_id], tmpdir)
+            result = run_cli(
+                ["tag", "food,groceries,essentials", "--ids", tx_id], tmpdir
+            )
             assert result.returncode == 0
 
             # Verify tags were applied
-            result = run_cli(["query", f"SELECT tags FROM transactions WHERE transaction_id = '{tx_id}'", "--json"], tmpdir)
+            result = run_cli(
+                [
+                    "query",
+                    f"SELECT tags FROM transactions WHERE transaction_id = '{tx_id}'",
+                    "--json",
+                ],
+                tmpdir,
+            )
             data = json.loads(result.stdout)
             tags_str = str(data["rows"][0][0])
             assert "food" in tags_str
@@ -237,7 +277,10 @@ class TestTagCommand:
             run_cli(["demo", "on"], tmpdir)
 
             # Get a transaction ID
-            result = run_cli(["query", "SELECT transaction_id FROM transactions LIMIT 1", "--json"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT transaction_id FROM transactions LIMIT 1", "--json"],
+                tmpdir,
+            )
             data = json.loads(result.stdout)
             tx_id = data["rows"][0][0]
 
@@ -249,7 +292,14 @@ class TestTagCommand:
             assert result.returncode == 0
 
             # Verify old tag is gone, new tag is present
-            result = run_cli(["query", f"SELECT tags FROM transactions WHERE transaction_id = '{tx_id}'", "--json"], tmpdir)
+            result = run_cli(
+                [
+                    "query",
+                    f"SELECT tags FROM transactions WHERE transaction_id = '{tx_id}'",
+                    "--json",
+                ],
+                tmpdir,
+            )
             data = json.loads(result.stdout)
             tags_str = str(data["rows"][0][0])
             assert "new-tag" in tags_str
@@ -260,7 +310,10 @@ class TestTagCommand:
         with tempfile.TemporaryDirectory() as tmpdir:
             run_cli(["demo", "on"], tmpdir)
 
-            result = run_cli(["query", "SELECT transaction_id FROM transactions LIMIT 1", "--json"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT transaction_id FROM transactions LIMIT 1", "--json"],
+                tmpdir,
+            )
             data = json.loads(result.stdout)
             tx_id = data["rows"][0][0]
 
@@ -279,20 +332,28 @@ class TestNewCommand:
             run_cli(["demo", "on"], tmpdir)
 
             # Get an account ID
-            result = run_cli(["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir
+            )
             data = json.loads(result.stdout)
             account_id = data["rows"][0][0]
 
             # Add balance snapshot
-            result = run_cli(["new", "balance", "--account-id", account_id, "--balance", "9999.99"], tmpdir)
+            result = run_cli(
+                ["new", "balance", "--account-id", account_id, "--balance", "9999.99"],
+                tmpdir,
+            )
             assert result.returncode == 0
 
             # Verify it was created
-            result = run_cli([
-                "query",
-                f"SELECT balance FROM balance_snapshots WHERE account_id = '{account_id}' ORDER BY snapshot_time DESC LIMIT 1",
-                "--json"
-            ], tmpdir)
+            result = run_cli(
+                [
+                    "query",
+                    f"SELECT balance FROM balance_snapshots WHERE account_id = '{account_id}' ORDER BY snapshot_time DESC LIMIT 1",
+                    "--json",
+                ],
+                tmpdir,
+            )
             data = json.loads(result.stdout)
             # Balance should be close to 9999.99
             assert len(data["rows"]) > 0
@@ -302,16 +363,25 @@ class TestNewCommand:
         with tempfile.TemporaryDirectory() as tmpdir:
             run_cli(["demo", "on"], tmpdir)
 
-            result = run_cli(["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir
+            )
             data = json.loads(result.stdout)
             account_id = data["rows"][0][0]
 
-            result = run_cli([
-                "new", "balance",
-                "--account-id", account_id,
-                "--balance", "5000.00",
-                "--date", "2025-01-15"
-            ], tmpdir)
+            result = run_cli(
+                [
+                    "new",
+                    "balance",
+                    "--account-id",
+                    account_id,
+                    "--balance",
+                    "5000.00",
+                    "--date",
+                    "2025-01-15",
+                ],
+                tmpdir,
+            )
             assert result.returncode == 0
 
 
@@ -326,14 +396,20 @@ class TestBackfillCommand:
             result = run_cli(["backfill", "balances", "--dry-run"], tmpdir)
             assert result.returncode == 0
             # Should mention dry run or preview
-            assert "dry" in result.stdout.lower() or "would" in result.stdout.lower() or "preview" in result.stdout.lower()
+            assert (
+                "dry" in result.stdout.lower()
+                or "would" in result.stdout.lower()
+                or "preview" in result.stdout.lower()
+            )
 
     def test_backfill_balances_with_days_limit(self):
         """Test that --days limits the backfill period."""
         with tempfile.TemporaryDirectory() as tmpdir:
             run_cli(["demo", "on"], tmpdir)
 
-            result = run_cli(["backfill", "balances", "--days", "30", "--dry-run"], tmpdir)
+            result = run_cli(
+                ["backfill", "balances", "--days", "30", "--dry-run"], tmpdir
+            )
             assert result.returncode == 0
 
 
@@ -347,17 +423,27 @@ class TestImportCommand:
 
             # Create test CSV
             csv_path = Path(tmpdir) / "test.csv"
-            csv_path.write_text("Date,Description,Amount\n2025-01-01,Test Transaction,-50.00\n")
+            csv_path.write_text(
+                "Date,Description,Amount\n2025-01-01,Test Transaction,-50.00\n"
+            )
 
             # Get account ID
-            result = run_cli(["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir
+            )
             data = json.loads(result.stdout)
             account_id = data["rows"][0][0]
 
             # Preview import
-            result = run_cli(["import", str(csv_path), "--account-id", account_id, "--preview"], tmpdir)
+            result = run_cli(
+                ["import", str(csv_path), "--account-id", account_id, "--preview"],
+                tmpdir,
+            )
             assert result.returncode == 0
-            assert "Test Transaction" in result.stdout or "preview" in result.stdout.lower()
+            assert (
+                "Test Transaction" in result.stdout
+                or "preview" in result.stdout.lower()
+            )
 
     def test_import_actually_imports(self):
         """Test that import without --preview actually imports transactions."""
@@ -366,23 +452,32 @@ class TestImportCommand:
 
             # Create test CSV with unique description
             csv_path = Path(tmpdir) / "test.csv"
-            csv_path.write_text("Date,Description,Amount\n2025-01-01,UniqueImportTest123,-99.99\n")
+            csv_path.write_text(
+                "Date,Description,Amount\n2025-01-01,UniqueImportTest123,-99.99\n"
+            )
 
             # Get account ID
-            result = run_cli(["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir
+            )
             data = json.loads(result.stdout)
             account_id = data["rows"][0][0]
 
             # Import
-            result = run_cli(["import", str(csv_path), "--account-id", account_id], tmpdir)
+            result = run_cli(
+                ["import", str(csv_path), "--account-id", account_id], tmpdir
+            )
             assert result.returncode == 0
 
             # Verify import
-            result = run_cli([
-                "query",
-                "SELECT * FROM transactions WHERE description = 'UniqueImportTest123'",
-                "--json"
-            ], tmpdir)
+            result = run_cli(
+                [
+                    "query",
+                    "SELECT * FROM transactions WHERE description = 'UniqueImportTest123'",
+                    "--json",
+                ],
+                tmpdir,
+            )
             data = json.loads(result.stdout)
             assert len(data["rows"]) > 0
 
@@ -391,11 +486,15 @@ class TestImportCommand:
         with tempfile.TemporaryDirectory() as tmpdir:
             run_cli(["demo", "on"], tmpdir)
 
-            result = run_cli(["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir
+            )
             data = json.loads(result.stdout)
             account_id = data["rows"][0][0]
 
-            result = run_cli(["import", "/nonexistent/file.csv", "--account-id", account_id], tmpdir)
+            result = run_cli(
+                ["import", "/nonexistent/file.csv", "--account-id", account_id], tmpdir
+            )
             assert result.returncode != 0
 
     def test_import_requires_account_id(self):
@@ -408,7 +507,10 @@ class TestImportCommand:
 
             result = run_cli(["import", str(csv_path)], tmpdir)
             assert result.returncode != 0
-            assert "account-id" in result.stdout.lower() or "account-id" in result.stderr.lower()
+            assert (
+                "account-id" in result.stdout.lower()
+                or "account-id" in result.stderr.lower()
+            )
 
     def test_import_list_profiles_empty(self):
         """Test that --list-profiles shows no profiles initially."""
@@ -424,19 +526,29 @@ class TestImportCommand:
 
             # Create test CSV
             csv_path = Path(tmpdir) / "test.csv"
-            csv_path.write_text("Date,Description,Amount\n2025-01-01,ProfileTest1,-50.00\n")
+            csv_path.write_text(
+                "Date,Description,Amount\n2025-01-01,ProfileTest1,-50.00\n"
+            )
 
             # Get account ID
-            result = run_cli(["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir
+            )
             data = json.loads(result.stdout)
             account_id = data["rows"][0][0]
 
             # Import with --save-profile
-            result = run_cli([
-                "import", str(csv_path),
-                "--account-id", account_id,
-                "--save-profile", "testbank"
-            ], tmpdir)
+            result = run_cli(
+                [
+                    "import",
+                    str(csv_path),
+                    "--account-id",
+                    account_id,
+                    "--save-profile",
+                    "testbank",
+                ],
+                tmpdir,
+            )
             assert result.returncode == 0
             assert "profile 'testbank' saved" in result.stdout.lower()
 
@@ -447,13 +559,21 @@ class TestImportCommand:
 
             # Create another CSV and import using the saved profile
             csv_path2 = Path(tmpdir) / "test2.csv"
-            csv_path2.write_text("Date,Description,Amount\n2025-01-02,ProfileTest2,-75.00\n")
+            csv_path2.write_text(
+                "Date,Description,Amount\n2025-01-02,ProfileTest2,-75.00\n"
+            )
 
-            result = run_cli([
-                "import", str(csv_path2),
-                "--account-id", account_id,
-                "--profile", "testbank"
-            ], tmpdir)
+            result = run_cli(
+                [
+                    "import",
+                    str(csv_path2),
+                    "--account-id",
+                    account_id,
+                    "--profile",
+                    "testbank",
+                ],
+                tmpdir,
+            )
             assert result.returncode == 0
             assert "using profile 'testbank'" in result.stdout.lower()
 
@@ -465,17 +585,28 @@ class TestImportCommand:
             csv_path = Path(tmpdir) / "test.csv"
             csv_path.write_text("Date,Description,Amount\n2025-01-01,Test,-50.00\n")
 
-            result = run_cli(["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir
+            )
             data = json.loads(result.stdout)
             account_id = data["rows"][0][0]
 
-            result = run_cli([
-                "import", str(csv_path),
-                "--account-id", account_id,
-                "--profile", "nonexistent"
-            ], tmpdir)
+            result = run_cli(
+                [
+                    "import",
+                    str(csv_path),
+                    "--account-id",
+                    account_id,
+                    "--profile",
+                    "nonexistent",
+                ],
+                tmpdir,
+            )
             assert result.returncode != 0
-            assert "not found" in result.stdout.lower() or "not found" in result.stderr.lower()
+            assert (
+                "not found" in result.stdout.lower()
+                or "not found" in result.stderr.lower()
+            )
 
     def test_import_list_profiles_json(self):
         """Test that --list-profiles --json outputs valid JSON."""
@@ -486,15 +617,23 @@ class TestImportCommand:
             csv_path = Path(tmpdir) / "test.csv"
             csv_path.write_text("Date,Description,Amount\n2025-01-01,Test,-50.00\n")
 
-            result = run_cli(["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir)
+            result = run_cli(
+                ["query", "SELECT account_id FROM accounts LIMIT 1", "--json"], tmpdir
+            )
             data = json.loads(result.stdout)
             account_id = data["rows"][0][0]
 
-            run_cli([
-                "import", str(csv_path),
-                "--account-id", account_id,
-                "--save-profile", "jsontest"
-            ], tmpdir)
+            run_cli(
+                [
+                    "import",
+                    str(csv_path),
+                    "--account-id",
+                    account_id,
+                    "--save-profile",
+                    "jsontest",
+                ],
+                tmpdir,
+            )
 
             # List profiles as JSON
             result = run_cli(["import", "--list-profiles", "--json"], tmpdir)
@@ -514,7 +653,10 @@ class TestRemoveCommand:
 
             result = run_cli(["remove", "nonexistent"], tmpdir)
             assert result.returncode != 0
-            assert "not found" in result.stdout.lower() or "not found" in result.stderr.lower()
+            assert (
+                "not found" in result.stdout.lower()
+                or "not found" in result.stderr.lower()
+            )
 
 
 class TestSetupCommand:
