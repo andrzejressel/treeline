@@ -122,14 +122,36 @@ jobs:
       - name: Install PyInstaller
         run: uv pip install pyinstaller
 
-      - name: Build binary
-        run: uv run pyinstaller --onefile --name tl --hidden-import=treeline --collect-all treeline src/treeline/cli.py
+      - name: Build binary (onedir for macOS, onefile for others)
+        run: |
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            # Use --onedir on macOS so we can sign all dependencies
+            uv run pyinstaller --onedir --name tl --hidden-import=treeline --collect-all treeline src/treeline/cli.py
+          else
+            # Use --onefile on Linux/Windows (no signing issues)
+            uv run pyinstaller --onefile --name tl --hidden-import=treeline --collect-all treeline src/treeline/cli.py
+          fi
+        shell: bash
 
-      - name: Upload CLI binary artifact
+      - name: Package CLI (macOS - tarball of directory)
+        if: runner.os == 'macOS'
+        run: |
+          cd dist
+          tar -czvf tl-macos-arm64.tar.gz tl/
+
+      - name: Upload CLI binary artifact (Linux/Windows)
+        if: runner.os != 'macOS'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: cli/dist/${{ matrix.binary }}
+
+      - name: Upload CLI bundle artifact (macOS)
+        if: runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: cli/dist/tl-macos-arm64.tar.gz
 
   upload-release-assets:
     needs: build-cli-binaries
@@ -155,15 +177,15 @@ jobs:
           asset_name: tl-linux-x64
           asset_content_type: application/octet-stream
 
-      - name: Upload macOS ARM64 CLI binary
+      - name: Upload macOS ARM64 CLI bundle
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           upload_url: ${{ github.event.release.upload_url }}
-          asset_path: artifacts/tl-macos-arm64/tl
-          asset_name: tl-macos-arm64
-          asset_content_type: application/octet-stream
+          asset_path: artifacts/tl-macos-arm64/tl-macos-arm64.tar.gz
+          asset_name: tl-macos-arm64.tar.gz
+          asset_content_type: application/gzip
 
       - name: Upload Windows CLI binary
         uses: actions/upload-release-asset@v1
