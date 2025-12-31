@@ -573,7 +573,7 @@ wheels = [
 
 [[package]]
 name = "treeline-money"
-version = "0.1.56"
+version = "0.1.57"
 source = { editable = "." }
 dependencies = [
     { name = "argon2-cffi" },
