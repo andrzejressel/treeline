@@ -1010,7 +1010,7 @@ class DuckDBRepository(Repository):
 
             result = conn.execute("""
                 SELECT rule_id, name, sql_condition, tags
-                FROM sys_plugin_transactions_rules
+                FROM sys_transactions_rules
                 WHERE enabled = true
                 ORDER BY sort_order ASC
             """).fetchall()

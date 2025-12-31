@@ -6,9 +6,7 @@
   "author": "Your Name",
   "main": "index.js",
   "permissions": {
-    "tables": {
-      "read": ["transactions", "accounts"],
-      "create": ["sys_plugin_hello_world"]
-    }
+    "read": ["transactions", "accounts"],
+    "schemaName": "plugin_hello_world"
   }
 }

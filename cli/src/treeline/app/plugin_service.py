@@ -90,9 +90,10 @@ class PluginService:
 
             manifest["id"] = name
             manifest["name"] = display_name
-            # Update permissions to use the new plugin ID
+            # Update permissions to use new schema isolation format
             manifest["permissions"] = {
-                "tables": {"write": [f"sys_plugin_{table_safe_name}"]}
+                "read": ["transactions", "accounts"],
+                "schemaName": f"plugin_{table_safe_name}"
             }
 
             with open(manifest_path, "w") as f:
@@ -111,8 +112,8 @@ class PluginService:
                     'name: "Hello World"', f'name: "{display_name}"'
                 )
                 content = content.replace(
-                    'write: ["sys_plugin_hello_world"]',
-                    f'write: ["sys_plugin_{table_safe_name}"]',
+                    'schemaName: "plugin_hello_world"',
+                    f'schemaName: "plugin_{table_safe_name}"',
                 )
                 index_ts_path.write_text(content)
             except Exception:

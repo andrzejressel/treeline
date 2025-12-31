@@ -9,12 +9,11 @@ export const plugin: Plugin = {
     version: "0.1.0",
     description: "An example plugin demonstrating the Treeline plugin SDK",
     author: "Your Name",
-    // Declare tables this plugin needs write access to.
-    // Community plugins can only write to sys_plugin_{id}_* tables.
+    // Plugins can read core tables (transactions, accounts) and write to their own schema.
+    // Own schema (plugin_{id}.*) is always writable - no declaration needed.
     permissions: {
-      tables: {
-        write: ["sys_plugin_hello_world"],
-      },
+      read: ["transactions", "accounts"],
+      schemaName: "plugin_hello_world",
     },
   },
 

@@ -64,16 +64,19 @@ Views receive `sdk` via props:
 
 ## Database Access
 
-- **Read anything**: `sdk.query("SELECT * FROM transactions")`
-- **Write only to your tables**: Must be declared in `manifest.json` permissions
-- **Table naming**: Use `sys_plugin_{your_plugin_id}_*` for your tables
+- **Read declared tables**: Declare in `manifest.json` permissions.read
+- **Write to own schema**: Plugins automatically have write access to `plugin_{id}.*`
+- **Schema naming**: Each plugin gets a schema like `plugin_hello_world`
 
 ## Common Patterns
 
 ### Create a table for your plugin data
 ```typescript
+// Create schema first (required before creating tables)
+await sdk.execute(`CREATE SCHEMA IF NOT EXISTS plugin_my_plugin`);
+
 await sdk.execute(`
-  CREATE TABLE IF NOT EXISTS sys_plugin_my_plugin_data (
+  CREATE TABLE IF NOT EXISTS plugin_my_plugin.data (
     id VARCHAR PRIMARY KEY,
     value INTEGER,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
