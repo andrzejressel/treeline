@@ -355,13 +355,86 @@ export interface PluginContext {
   openView: (viewId: string, props?: Record<string, unknown>) => void;
 }
 
+// ============================================================================
+// Plugin Migrations
+// ============================================================================
+
+/**
+ * A single database migration for a plugin.
+ * Migrations are run in order by version number when the plugin loads.
+ *
+ * The app automatically creates `plugin_<id>.schema_migrations` to track
+ * which migrations have been run.
+ *
+ * @example
+ * ```typescript
+ * const migrations: PluginMigration[] = [
+ *   {
+ *     version: 1,
+ *     name: "create_goals_table",
+ *     up: `
+ *       CREATE TABLE plugin_goals.goals (
+ *         id VARCHAR PRIMARY KEY,
+ *         name VARCHAR NOT NULL
+ *       )
+ *     `
+ *   },
+ *   {
+ *     version: 2,
+ *     name: "add_priority_column",
+ *     up: `ALTER TABLE plugin_goals.goals ADD COLUMN priority INTEGER DEFAULT 0`
+ *   }
+ * ];
+ * ```
+ */
+export interface PluginMigration {
+  /**
+   * Unique version number. Must be a positive integer.
+   * Migrations run in order of version number.
+   */
+  version: number;
+
+  /**
+   * Human-readable name for this migration.
+   * Used in logs and the schema_migrations table.
+   */
+  name: string;
+
+  /**
+   * SQL to execute for this migration.
+   * Can be a single statement or multiple statements separated by semicolons.
+   * The plugin's schema is created automatically before migrations run.
+   */
+  up: string;
+}
+
 /**
  * Plugin interface that all plugins must implement.
  */
 export interface Plugin {
   /** Plugin manifest */
   manifest: PluginManifest;
-  /** Called when plugin is activated */
+
+  /**
+   * Database migrations for this plugin.
+   * Run in order by version number when the plugin loads.
+   * The app creates the plugin's schema automatically before running migrations.
+   *
+   * @example
+   * ```typescript
+   * export const plugin: Plugin = {
+   *   manifest: { ... },
+   *   migrations: [
+   *     { version: 1, name: "initial", up: "CREATE TABLE plugin_goals.goals (...)" },
+   *     { version: 2, name: "add_index", up: "CREATE INDEX ..." },
+   *   ],
+   *   activate(ctx) { ... }
+   * }
+   * ```
+   */
+  migrations?: PluginMigration[];
+
+  /** Called when plugin is activated (after migrations complete) */
   activate: (ctx: PluginContext) => void | Promise<void>;
   /** Called when plugin is deactivated */
   deactivate?: () => void | Promise<void>;
