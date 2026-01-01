@@ -9,7 +9,7 @@ use clap::{Parser, Subcommand};
 mod commands;
 mod output;
 
-use commands::{backup, compact, demo, doctor, encrypt, import, new, plugin, query, remove, setup, status, sync, tag};
+use commands::{backup, compact, demo, doctor, encrypt, plugin, query, status, sync, tag};
 
 /// Treeline - personal finance in your terminal
 #[derive(Parser)]
@@ -68,81 +68,6 @@ enum Commands {
         /// Output as JSON
         #[arg(long)]
         json: bool,
-    },
-
-    /// Create new records
-    New {
-        #[command(subcommand)]
-        command: new::NewCommands,
-    },
-
-    /// Backfill historical data
-    Backfill {
-        #[command(subcommand)]
-        command: commands::backfill::BackfillCommands,
-    },
-
-    /// Import transactions from CSV
-    Import {
-        /// Path to CSV file
-        file: Option<PathBuf>,
-        /// Account ID to import into
-        #[arg(long)]
-        account_id: Option<String>,
-        /// Preview without importing
-        #[arg(long)]
-        preview: bool,
-        /// Use saved import profile
-        #[arg(long)]
-        profile: Option<String>,
-        /// Save settings as profile
-        #[arg(long)]
-        save_profile: Option<String>,
-        /// List saved profiles
-        #[arg(long)]
-        list_profiles: bool,
-        /// Output as JSON
-        #[arg(long)]
-        json: bool,
-        /// Column name for transaction date
-        #[arg(long)]
-        date_column: Option<String>,
-        /// Column name for transaction description
-        #[arg(long)]
-        description_column: Option<String>,
-        /// Column name for amount (single amount column)
-        #[arg(long)]
-        amount_column: Option<String>,
-        /// Column name for debit amounts (accounting format)
-        #[arg(long)]
-        debit_column: Option<String>,
-        /// Column name for credit amounts (accounting format)
-        #[arg(long)]
-        credit_column: Option<String>,
-        /// Negate debit values (when debits are shown as positive in CSV)
-        #[arg(long)]
-        debit_negative: bool,
-        /// Flip signs on all amounts (for credit card statements)
-        #[arg(long)]
-        flip_signs: bool,
-    },
-
-    /// Remove an integration
-    Remove {
-        /// Integration name to remove
-        name: String,
-        /// Skip confirmation prompt
-        #[arg(long, short)]
-        force: bool,
-    },
-
-    /// Set up a new integration
-    Setup {
-        /// Integration type (simplefin, demo)
-        integration: String,
-        /// SimpleFIN setup token
-        #[arg(long)]
-        token: Option<String>,
     },
 
     /// Manage backups
@@ -230,17 +155,6 @@ fn run(cli: Cli) -> Result<()> {
             query::run(sql.as_deref(), file.as_deref(), &fmt)
         }
         Commands::Tag { tags, ids, replace, json } => tag::run(&tags, ids, replace, json),
-        Commands::New { command } => new::run(command),
-        Commands::Backfill { command } => commands::backfill::run(command),
-        Commands::Import { file, account_id, preview, profile, save_profile, list_profiles, json,
-                           date_column, description_column, amount_column, debit_column, credit_column,
-                           debit_negative, flip_signs } => {
-            import::run(file, account_id, preview, profile, save_profile, list_profiles, json,
-                       date_column, description_column, amount_column, debit_column, credit_column,
-                       debit_negative, flip_signs)
-        }
-        Commands::Remove { name, force } => remove::run(&name, force),
-        Commands::Setup { integration, token } => setup::run(&integration, token),
         Commands::Backup { command } => backup::run(command),
         Commands::Compact { skip_backup, json } => compact::run(skip_backup, json),
         Commands::Doctor { verbose, json } => doctor::run(verbose, json),

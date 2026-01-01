@@ -1,17 +1,12 @@
 //! CLI command implementations
 
 pub mod backup;
-pub mod backfill;
 pub mod compact;
 pub mod demo;
 pub mod doctor;
 pub mod encrypt;
-pub mod import;
-pub mod new;
 pub mod plugin;
 pub mod query;
-pub mod remove;
-pub mod setup;
 pub mod status;
 pub mod sync;
 pub mod tag;

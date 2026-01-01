@@ -47,27 +47,6 @@ pub enum PluginCommands {
         #[arg(long)]
         json: bool,
     },
-    /// Fetch plugin manifest from GitHub release
-    Manifest {
-        /// GitHub URL of the plugin
-        source: String,
-        /// Version to fetch (e.g., v1.0.0). Defaults to latest release.
-        #[arg(short, long)]
-        version: Option<String>,
-    },
-    /// Upgrade a plugin to the latest version
-    Upgrade {
-        /// Plugin ID to upgrade
-        plugin_id: String,
-        /// Output as JSON
-        #[arg(long)]
-        json: bool,
-    },
-    /// Check if an update is available for a plugin
-    CheckUpdate {
-        /// Plugin ID to check
-        plugin_id: String,
-    },
 }
 
 pub fn run(command: PluginCommands) -> Result<()> {
@@ -190,68 +169,6 @@ pub fn run(command: PluginCommands) -> Result<()> {
                 }
                 println!();
             }
-        }
-
-        PluginCommands::Manifest { source, version } => {
-            match plugin_service.fetch_manifest(&source, version.as_deref()) {
-                Ok((manifest, version)) => {
-                    println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-                        "success": true,
-                        "manifest": manifest,
-                        "version": version
-                    }))?);
-                }
-                Err(e) => {
-                    println!("{}", serde_json::json!({
-                        "success": false,
-                        "error": e.to_string()
-                    }));
-                    std::process::exit(1);
-                }
-            }
-        }
-
-        PluginCommands::Upgrade { plugin_id, json } => {
-            let result = plugin_service.upgrade_plugin(&plugin_id)?;
-
-            if !result.success {
-                if json {
-                    println!("{}", serde_json::json!({
-                        "success": false,
-                        "error": result.error
-                    }));
-                } else {
-                    eprintln!("{}", format!("Error: {}", result.error.unwrap_or_default()).red());
-                }
-                std::process::exit(1);
-            }
-
-            if json {
-                println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-                    "success": true,
-                    "plugin_id": result.plugin_id,
-                    "plugin_name": result.plugin_name,
-                    "version": result.version
-                }))?);
-            } else {
-                println!("\n{}", format!("✓ Upgraded plugin: {}", result.plugin_name.as_deref().unwrap_or("")).green());
-                println!("  Version: {}", result.version.as_deref().unwrap_or(""));
-                println!("\n{}\n", "Restart the Treeline UI to load the updated plugin".cyan());
-            }
-        }
-
-        PluginCommands::CheckUpdate { plugin_id } => {
-            let update_info = plugin_service.check_update(&plugin_id)?;
-
-            println!("{}", serde_json::to_string_pretty(&serde_json::json!({
-                "success": true,
-                "plugin_id": update_info.plugin_id,
-                "has_update": update_info.has_update,
-                "installed_version": update_info.installed_version,
-                "latest_version": update_info.latest_version,
-                "source": update_info.source,
-                "reason": update_info.reason
-            }))?);
         }
     }
 
