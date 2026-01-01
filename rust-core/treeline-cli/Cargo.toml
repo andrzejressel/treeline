@@ -1,0 +1,28 @@
+[package]
+name = "treeline-cli"
+description = "Treeline personal finance CLI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "tl"
+path = "src/main.rs"
+
+[dependencies]
+treeline-core.workspace = true
+clap.workspace = true
+comfy-table.workspace = true
+colored.workspace = true
+dialoguer.workspace = true
+indicatif.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+anyhow.workspace = true
+chrono.workspace = true
+uuid.workspace = true
+rust_decimal.workspace = true
+dirs.workspace = true
+atty.workspace = true

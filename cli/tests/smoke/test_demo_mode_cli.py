@@ -31,7 +31,9 @@ def run_cli(
     # Remove any existing demo mode env var to test config-based mode
     env.pop("TREELINE_DEMO_MODE", None)
 
-    cmd = ["uv", "run", "treeline"] + args
+    # Use Rust CLI binary
+    rust_binary = Path(__file__).parent.parent.parent.parent / "rust-core" / "target" / "release" / "tl"
+    cmd = [str(rust_binary)] + args
     return subprocess.run(
         cmd,
         capture_output=True,

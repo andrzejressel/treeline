@@ -1,0 +1,375 @@
+//! SimpleFIN API client
+//!
+//! Handles communication with the SimpleFIN Bridge API for account and transaction sync.
+
+use std::collections::HashMap;
+use std::time::Duration;
+
+use anyhow::{Context, Result};
+use chrono::{DateTime, NaiveDate, TimeZone, Utc};
+use reqwest::blocking::Client;
+use rust_decimal::Decimal;
+use serde::Deserialize;
+use url::Url;
+use uuid::Uuid;
+
+use crate::domain::{Account, BalanceSnapshot, Transaction};
+
+/// SimpleFIN API client
+pub struct SimpleFINClient {
+    client: Client,
+    base_url: String,
+    username: String,
+    password: String,
+}
+
+/// SimpleFIN API response for accounts
+#[derive(Debug, Deserialize)]
+pub struct AccountsResponse {
+    pub accounts: Vec<SimpleFINAccount>,
+    #[serde(default)]
+    pub errors: Vec<String>,
+}
+
+/// SimpleFIN account from API
+#[derive(Debug, Deserialize)]
+pub struct SimpleFINAccount {
+    pub id: String,
+    pub name: String,
+    #[serde(default = "default_currency")]
+    pub currency: String,
+    #[serde(default)]
+    pub balance: Option<String>,
+    #[serde(rename = "available-balance", default)]
+    pub available_balance: Option<String>,
+    #[serde(rename = "balance-date", default)]
+    pub balance_date: Option<i64>,
+    #[serde(default)]
+    pub org: Option<SimpleFINOrg>,
+    #[serde(default)]
+    pub transactions: Vec<SimpleFINTransaction>,
+}
+
+fn default_currency() -> String {
+    "USD".to_string()
+}
+
+/// SimpleFIN organization/institution info
+#[derive(Debug, Deserialize)]
+pub struct SimpleFINOrg {
+    pub name: Option<String>,
+    pub url: Option<String>,
+    pub domain: Option<String>,
+}
+
+/// SimpleFIN transaction from API
+#[derive(Debug, Deserialize)]
+pub struct SimpleFINTransaction {
+    pub id: String,
+    pub posted: i64,
+    pub amount: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub pending: bool,
+    #[serde(default)]
+    pub extra: Option<SimpleFINTransactionExtra>,
+}
+
+/// Extra transaction metadata
+#[derive(Debug, Deserialize)]
+pub struct SimpleFINTransactionExtra {
+    pub category: Option<String>,
+}
+
+/// Result of syncing accounts
+pub struct SyncedAccounts {
+    pub accounts: Vec<Account>,
+    pub balance_snapshots: Vec<BalanceSnapshot>,
+    pub warnings: Vec<String>,
+}
+
+/// Result of syncing transactions
+pub struct SyncedTransactions {
+    /// Tuples of (simplefin_account_id, transaction)
+    pub transactions: Vec<(String, Transaction)>,
+    pub warnings: Vec<String>,
+}
+
+impl SimpleFINClient {
+    /// Create a new SimpleFIN client from an access URL
+    pub fn new(access_url: &str) -> Result<Self> {
+        // Parse and validate access URL
+        let parsed = Url::parse(access_url)
+            .context("Invalid URL format")?;
+
+        // Validate HTTPS
+        if parsed.scheme() != "https" {
+            anyhow::bail!("SimpleFIN access URL must use HTTPS");
+        }
+
+        // Validate domain
+        let host = parsed.host_str().unwrap_or("");
+        if !host.ends_with("simplefin.org") {
+            anyhow::bail!("SimpleFIN access URL must be from simplefin.org domain");
+        }
+
+        // Extract credentials
+        let username = parsed.username().to_string();
+        let password = parsed.password().unwrap_or("").to_string();
+
+        if username.is_empty() || password.is_empty() {
+            anyhow::bail!("SimpleFIN access URL must include credentials");
+        }
+
+        // Build base URL without credentials
+        let base_url = format!(
+            "{}://{}{}",
+            parsed.scheme(),
+            parsed.host_str().unwrap_or(""),
+            parsed.path()
+        );
+
+        let client = Client::builder()
+            .timeout(Duration::from_secs(30))
+            .build()?;
+
+        Ok(Self {
+            client,
+            base_url,
+            username,
+            password,
+        })
+    }
+
+    /// Get accounts from SimpleFIN
+    pub fn get_accounts(&self) -> Result<SyncedAccounts> {
+        let url = format!("{}/accounts", self.base_url);
+
+        let response = self.client
+            .get(&url)
+            .basic_auth(&self.username, Some(&self.password))
+            .send()
+            .map_err(|e| self.map_request_error(e))?;
+
+        self.check_response_status(&response)?;
+
+        let data: AccountsResponse = response.json()
+            .context("Failed to parse SimpleFIN response")?;
+
+        let mut accounts = Vec::new();
+        let mut balance_snapshots = Vec::new();
+        let warnings = data.errors.clone();
+
+        for sf_account in data.accounts {
+            let account = self.map_account(&sf_account);
+
+            // Create balance snapshot if balance is available
+            if let Some(balance_str) = &sf_account.balance {
+                if let Ok(balance) = balance_str.parse::<Decimal>() {
+                    let snapshot_time = sf_account.balance_date
+                        .map(|ts| Utc.timestamp_opt(ts, 0).single())
+                        .flatten()
+                        .unwrap_or_else(Utc::now)
+                        .naive_utc();
+
+                    balance_snapshots.push(BalanceSnapshot {
+                        id: Uuid::new_v4(),
+                        account_id: account.id,
+                        balance,
+                        snapshot_time,
+                        source: Some("sync".to_string()),
+                        created_at: Utc::now(),
+                        updated_at: Utc::now(),
+                    });
+                }
+            }
+
+            accounts.push(account);
+        }
+
+        Ok(SyncedAccounts {
+            accounts,
+            balance_snapshots,
+            warnings,
+        })
+    }
+
+    /// Get transactions from SimpleFIN
+    pub fn get_transactions(
+        &self,
+        start_date: NaiveDate,
+        end_date: NaiveDate,
+        account_ids: Option<&[String]>,
+    ) -> Result<SyncedTransactions> {
+        let mut url = format!("{}/accounts", self.base_url);
+
+        // Add query parameters
+        let start_ts = start_date.and_hms_opt(0, 0, 0)
+            .map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc).timestamp())
+            .unwrap_or(0);
+        let end_ts = end_date.and_hms_opt(23, 59, 59)
+            .map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc).timestamp())
+            .unwrap_or(0);
+
+        url.push_str(&format!("?start-date={}&end-date={}", start_ts, end_ts));
+
+        // Add account filters if specified
+        if let Some(ids) = account_ids {
+            for id in ids {
+                url.push_str(&format!("&account={}", id));
+            }
+        }
+
+        let response = self.client
+            .get(&url)
+            .basic_auth(&self.username, Some(&self.password))
+            .send()
+            .map_err(|e| self.map_request_error(e))?;
+
+        self.check_response_status(&response)?;
+
+        let data: AccountsResponse = response.json()
+            .context("Failed to parse SimpleFIN response")?;
+
+        let mut transactions = Vec::new();
+        let warnings = data.errors.clone();
+
+        for sf_account in data.accounts {
+            for sf_tx in sf_account.transactions {
+                let tx = self.map_transaction(&sf_tx, &sf_account.id);
+                transactions.push((sf_account.id.clone(), tx));
+            }
+        }
+
+        Ok(SyncedTransactions {
+            transactions,
+            warnings,
+        })
+    }
+
+    /// Map SimpleFIN account to domain Account
+    fn map_account(&self, sf_account: &SimpleFINAccount) -> Account {
+        let mut external_ids = HashMap::new();
+        external_ids.insert("simplefin".to_string(), sf_account.id.clone());
+
+        // Parse balance if available
+        let balance = sf_account.balance.as_ref()
+            .and_then(|b| b.parse::<Decimal>().ok());
+
+        Account {
+            id: Uuid::new_v4(),
+            name: sf_account.name.clone(),
+            nickname: None,
+            currency: sf_account.currency.clone(),
+            account_type: None,
+            external_ids,
+            balance,
+            institution_name: sf_account.org.as_ref().and_then(|o| o.name.clone()),
+            institution_url: sf_account.org.as_ref().and_then(|o| o.url.clone()),
+            institution_domain: sf_account.org.as_ref().and_then(|o| o.domain.clone()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    /// Map SimpleFIN transaction to domain Transaction
+    fn map_transaction(&self, sf_tx: &SimpleFINTransaction, _sf_account_id: &str) -> Transaction {
+        let mut external_ids = HashMap::new();
+        external_ids.insert("simplefin".to_string(), sf_tx.id.clone());
+
+        // Parse amount
+        let amount = sf_tx.amount.parse::<Decimal>().unwrap_or_default();
+
+        // Convert timestamp to date
+        let posted_date = Utc.timestamp_opt(sf_tx.posted, 0)
+            .single()
+            .map(|dt| dt.naive_utc().date())
+            .unwrap_or_else(|| Utc::now().naive_utc().date());
+
+        // Extract category as tag if present
+        let tags = sf_tx.extra
+            .as_ref()
+            .and_then(|e| e.category.clone())
+            .map(|c| vec![c])
+            .unwrap_or_default();
+
+        Transaction {
+            id: Uuid::new_v4(),
+            account_id: Uuid::nil(), // Will be set by sync service after mapping
+            amount,
+            description: sf_tx.description.clone(),
+            transaction_date: posted_date,
+            posted_date, // NaiveDate, not Option
+            external_ids,
+            tags,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+            deleted_at: None,
+            parent_transaction_id: None,
+        }
+    }
+
+    /// Map request errors to user-friendly messages
+    fn map_request_error(&self, error: reqwest::Error) -> anyhow::Error {
+        if error.is_timeout() {
+            anyhow::anyhow!("Connection timed out after 30 seconds")
+        } else if error.is_connect() {
+            anyhow::anyhow!("Unable to connect to SimpleFIN servers")
+        } else {
+            anyhow::anyhow!("SimpleFIN request failed: {}", error)
+        }
+    }
+
+    /// Check response status and return appropriate errors
+    fn check_response_status(&self, response: &reqwest::blocking::Response) -> Result<()> {
+        match response.status().as_u16() {
+            200 => Ok(()),
+            403 => anyhow::bail!(
+                "SimpleFIN authentication failed. Your access token may be invalid or revoked. \
+                Please reset your SimpleFIN credentials at https://beta-bridge.simplefin.org/"
+            ),
+            402 => anyhow::bail!(
+                "SimpleFIN subscription payment required. \
+                Please check your SimpleFIN account at https://beta-bridge.simplefin.org/"
+            ),
+            status => anyhow::bail!("SimpleFIN API error: HTTP {}", status),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_valid_access_url() {
+        let url = "https://user:pass@bridge.simplefin.org/simplefin/accounts";
+        let client = SimpleFINClient::new(url);
+        assert!(client.is_ok());
+    }
+
+    #[test]
+    fn test_reject_http_url() {
+        let url = "http://user:pass@bridge.simplefin.org/simplefin/accounts";
+        let result = SimpleFINClient::new(url);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("HTTPS"));
+    }
+
+    #[test]
+    fn test_reject_wrong_domain() {
+        let url = "https://user:pass@evil.com/simplefin/accounts";
+        let result = SimpleFINClient::new(url);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("simplefin.org"));
+    }
+
+    #[test]
+    fn test_reject_missing_credentials() {
+        let url = "https://bridge.simplefin.org/simplefin/accounts";
+        let result = SimpleFINClient::new(url);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("credentials"));
+    }
+}

@@ -1,0 +1,58 @@
+[package]
+name = "treeline-core"
+description = "Core business logic for Treeline personal finance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Database
+duckdb.workspace = true
+
+# Async
+tokio.workspace = true
+async-trait.workspace = true
+
+# Types
+uuid.workspace = true
+chrono.workspace = true
+rust_decimal.workspace = true
+
+# Crypto
+sha2.workspace = true
+argon2.workspace = true
+
+# HTTP
+reqwest.workspace = true
+
+# Error handling
+thiserror.workspace = true
+anyhow.workspace = true
+
+# Regex
+regex.workspace = true
+
+# CSV parsing
+csv.workspace = true
+
+# Crypto
+rand.workspace = true
+base64.workspace = true
+hex = "0.4"
+
+# Zip archives
+zip.workspace = true
+
+# URL parsing
+url = "2"
+
+# Temp files
+tempfile = "3"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
