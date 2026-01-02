@@ -150,8 +150,31 @@ impl SyncService {
             }
         }
 
-        // Fetch transactions
-        let ext_account_ids: Vec<String> = external_to_internal.keys().cloned().collect();
+        // Fetch transactions (excluding balances-only accounts)
+        // Check accountSettings for balancesOnly flag on each account
+        let account_settings = settings
+            .get("accountSettings")
+            .and_then(|v| v.as_object());
+
+        let ext_account_ids: Vec<String> = external_to_internal
+            .keys()
+            .filter(|ext_id| {
+                // Include account only if NOT marked as balancesOnly
+                if let Some(settings_map) = account_settings {
+                    if let Some(acc_settings) = settings_map.get(*ext_id) {
+                        // Default to false if balancesOnly not present
+                        return !acc_settings
+                            .get("balancesOnly")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false);
+                    }
+                }
+                // No settings for this account = include it
+                true
+            })
+            .cloned()
+            .collect();
+
         let txs_result = provider.get_transactions(start_date, end_date, &ext_account_ids, settings)?;
         provider_warnings.extend(txs_result.warnings);
 
