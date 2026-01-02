@@ -15,6 +15,7 @@ pub mod encryption;
 pub mod import;
 mod balance;
 pub mod plugin;
+pub mod migration;
 
 pub use status::{StatusService, StatusSummary, AccountSummary, DateRange};
 pub use sync::SyncService;
@@ -28,3 +29,4 @@ pub use encryption::EncryptionService;
 pub use import::ImportService;
 pub use balance::BalanceService;
 pub use plugin::{PluginService, PluginInfo, PluginManifest, PluginResult, UpdateInfo};
+pub use migration::{MigrationService, MigrationResult};

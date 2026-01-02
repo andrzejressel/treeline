@@ -12,6 +12,7 @@ pub mod ports;
 pub mod services;
 pub mod adapters;
 pub mod config;
+pub mod migrations;
 
 use std::path::Path;
 use std::sync::Arc;

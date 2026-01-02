@@ -10,6 +10,7 @@ use rust_decimal::Decimal;
 use uuid::Uuid;
 
 use crate::domain::{Account, BalanceSnapshot, Transaction};
+use crate::services::MigrationService;
 
 /// DuckDB repository implementation
 pub struct DuckDbRepository {
@@ -46,137 +47,18 @@ impl DuckDbRepository {
         })
     }
 
-    /// Ensure database schema exists
-    pub fn ensure_schema(&self) -> Result<()> {
+    /// Run database migrations using the MigrationService
+    ///
+    /// Returns the migration result showing what was applied.
+    pub fn run_migrations(&self) -> Result<crate::services::MigrationResult> {
         let conn = self.conn.lock().unwrap();
-
-        // Create migrations table
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS sys_migrations (
-                migration_name VARCHAR PRIMARY KEY,
-                applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )",
-            [],
-        )?;
-
-        // Check if we need to run migrations
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM sys_migrations",
-            [],
-            |row| row.get(0),
-        )?;
-
-        if count == 0 {
-            self.run_migrations(&conn)?;
-        }
-
-        Ok(())
+        let migration_service = MigrationService::new(&conn);
+        migration_service.run_pending()
     }
 
-    fn run_migrations(&self, conn: &Connection) -> Result<()> {
-        // Create core tables
-        conn.execute_batch(
-            r#"
-            -- Accounts table (matching Python schema - no balance column)
-            CREATE TABLE IF NOT EXISTS sys_accounts (
-                account_id VARCHAR PRIMARY KEY,
-                name VARCHAR NOT NULL,
-                nickname VARCHAR,
-                account_type VARCHAR,
-                currency VARCHAR NOT NULL DEFAULT 'USD',
-                external_ids JSON DEFAULT '{}',
-                institution_name VARCHAR,
-                institution_url VARCHAR,
-                institution_domain VARCHAR,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- Transactions table with foreign key constraint
-            CREATE TABLE IF NOT EXISTS sys_transactions (
-                transaction_id VARCHAR PRIMARY KEY,
-                account_id VARCHAR NOT NULL,
-                amount DECIMAL(15,2) NOT NULL,
-                description VARCHAR,
-                transaction_date DATE NOT NULL,
-                posted_date DATE NOT NULL,
-                tags VARCHAR[],
-                external_ids JSON DEFAULT '{}',
-                deleted_at TIMESTAMP,
-                parent_transaction_id VARCHAR,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (account_id) REFERENCES sys_accounts(account_id)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_sys_transactions_account_id ON sys_transactions(account_id);
-            CREATE INDEX IF NOT EXISTS idx_sys_transactions_date ON sys_transactions(transaction_date);
-            CREATE INDEX IF NOT EXISTS idx_sys_transactions_parent_id ON sys_transactions(parent_transaction_id);
-
-            -- Balance snapshots table with foreign key constraint
-            CREATE TABLE IF NOT EXISTS sys_balance_snapshots (
-                snapshot_id VARCHAR PRIMARY KEY,
-                account_id VARCHAR NOT NULL,
-                balance DECIMAL(15,2) NOT NULL,
-                snapshot_time TIMESTAMP NOT NULL,
-                source VARCHAR,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (account_id) REFERENCES sys_accounts(account_id)
-            );
-
-            CREATE INDEX IF NOT EXISTS idx_sys_balance_snapshots_account_id ON sys_balance_snapshots(account_id);
-            CREATE INDEX IF NOT EXISTS idx_sys_balance_snapshots_time ON sys_balance_snapshots(snapshot_time);
-
-            -- Integrations table
-            CREATE TABLE IF NOT EXISTS sys_integrations (
-                integration_name VARCHAR PRIMARY KEY,
-                integration_settings JSON NOT NULL,
-                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-            );
-
-            -- Views (matching Python schema)
-            CREATE OR REPLACE VIEW transactions AS
-            SELECT
-                t.transaction_id,
-                t.account_id,
-                t.amount,
-                t.description,
-                t.transaction_date,
-                t.posted_date,
-                t.tags,
-                t.parent_transaction_id,
-                a.name AS account_name,
-                a.account_type,
-                a.currency,
-                a.institution_name
-            FROM sys_transactions t
-            LEFT JOIN sys_accounts a ON t.account_id = a.account_id
-            WHERE t.deleted_at IS NULL;
-
-            CREATE OR REPLACE VIEW accounts AS
-            SELECT * FROM sys_accounts;
-
-            CREATE OR REPLACE VIEW balance_snapshots AS
-            SELECT
-                s.snapshot_id,
-                s.account_id,
-                s.balance,
-                s.snapshot_time,
-                s.source,
-                s.created_at,
-                s.updated_at,
-                a.name AS account_name,
-                a.institution_name
-            FROM sys_balance_snapshots s
-            LEFT JOIN sys_accounts a ON s.account_id = a.account_id;
-
-            -- Mark migration as applied
-            INSERT INTO sys_migrations (migration_name) VALUES ('001_initial_schema');
-            "#,
-        )?;
-
+    /// Ensure database schema exists (runs pending migrations)
+    pub fn ensure_schema(&self) -> Result<()> {
+        self.run_migrations()?;
         Ok(())
     }
 
