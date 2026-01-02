@@ -516,3 +516,90 @@ pub fn generate_demo_balance_snapshots() -> Vec<BalanceSnapshot> {
 
     snapshots
 }
+
+// =============================================================================
+// DemoDataProvider - implements DataAggregationProvider trait
+// =============================================================================
+
+use crate::ports::{DataAggregationProvider, IntegrationProvider, FetchAccountsResult, FetchTransactionsResult};
+use crate::domain::result::Result;
+use serde_json::Value as JsonValue;
+
+/// Demo data provider
+///
+/// Implements DataAggregationProvider and IntegrationProvider traits
+/// for generating realistic demo data.
+pub struct DemoDataProvider;
+
+impl DemoDataProvider {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for DemoDataProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DataAggregationProvider for DemoDataProvider {
+    fn name(&self) -> &str {
+        "demo"
+    }
+
+    fn can_get_accounts(&self) -> bool {
+        true
+    }
+
+    fn can_get_transactions(&self) -> bool {
+        true
+    }
+
+    fn can_get_balances(&self) -> bool {
+        true
+    }
+
+    fn get_accounts(&self, _settings: &JsonValue) -> Result<FetchAccountsResult> {
+        Ok(FetchAccountsResult {
+            accounts: generate_demo_accounts(),
+            balance_snapshots: generate_demo_balance_snapshots(),
+            warnings: Vec::new(),
+        })
+    }
+
+    fn get_transactions(
+        &self,
+        _start_date: NaiveDate,
+        _end_date: NaiveDate,
+        _account_ids: &[String],
+        _settings: &JsonValue,
+    ) -> Result<FetchTransactionsResult> {
+        let transactions = generate_demo_transactions();
+
+        // Convert to (provider_account_id, Transaction) pairs
+        let txs_with_ids: Vec<(String, Transaction)> = transactions
+            .into_iter()
+            .map(|tx| {
+                // Get the demo external ID for this transaction's account
+                let provider_account_id = tx.external_ids
+                    .get("demo")
+                    .cloned()
+                    .unwrap_or_else(|| tx.account_id.to_string());
+                (provider_account_id, tx)
+            })
+            .collect();
+
+        Ok(FetchTransactionsResult {
+            transactions: txs_with_ids,
+            warnings: Vec::new(),
+        })
+    }
+}
+
+impl IntegrationProvider for DemoDataProvider {
+    fn setup(&self, _options: &JsonValue) -> Result<JsonValue> {
+        // Demo integration needs no configuration
+        Ok(serde_json::json!({}))
+    }
+}

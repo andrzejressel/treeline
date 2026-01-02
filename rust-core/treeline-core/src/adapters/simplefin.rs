@@ -16,6 +16,7 @@ use uuid::Uuid;
 use crate::domain::{Account, BalanceSnapshot, Transaction};
 
 /// SimpleFIN API client
+#[derive(Debug)]
 pub struct SimpleFINClient {
     client: Client,
     base_url: String,
@@ -371,5 +372,134 @@ mod tests {
         let result = SimpleFINClient::new(url);
         assert!(result.is_err());
         assert!(result.unwrap_err().to_string().contains("credentials"));
+    }
+}
+
+// =============================================================================
+// SimpleFINProvider - implements DataAggregationProvider trait
+// =============================================================================
+
+use base64::Engine;
+use serde_json::Value as JsonValue;
+
+use crate::domain::result::Result as DomainResult;
+use crate::ports::{DataAggregationProvider, IntegrationProvider, FetchAccountsResult, FetchTransactionsResult};
+
+/// SimpleFIN data provider
+///
+/// Implements DataAggregationProvider and IntegrationProvider traits
+/// for syncing real financial data via SimpleFIN Bridge.
+pub struct SimpleFINProvider;
+
+impl SimpleFINProvider {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for SimpleFINProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl DataAggregationProvider for SimpleFINProvider {
+    fn name(&self) -> &str {
+        "simplefin"
+    }
+
+    fn can_get_accounts(&self) -> bool {
+        true
+    }
+
+    fn can_get_transactions(&self) -> bool {
+        true
+    }
+
+    fn can_get_balances(&self) -> bool {
+        true
+    }
+
+    fn get_accounts(&self, settings: &JsonValue) -> DomainResult<FetchAccountsResult> {
+        let access_url = settings.get("accessUrl")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| crate::domain::result::Error::Config("SimpleFIN accessUrl not found in settings".to_string()))?;
+
+        let client = SimpleFINClient::new(access_url)
+            .map_err(|e| crate::domain::result::Error::Sync(e.to_string()))?;
+
+        let synced = client.get_accounts()
+            .map_err(|e| crate::domain::result::Error::Sync(e.to_string()))?;
+
+        Ok(FetchAccountsResult {
+            accounts: synced.accounts,
+            balance_snapshots: synced.balance_snapshots,
+            warnings: synced.warnings,
+        })
+    }
+
+    fn get_transactions(
+        &self,
+        start_date: NaiveDate,
+        end_date: NaiveDate,
+        account_ids: &[String],
+        settings: &JsonValue,
+    ) -> DomainResult<FetchTransactionsResult> {
+        let access_url = settings.get("accessUrl")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| crate::domain::result::Error::Config("SimpleFIN accessUrl not found in settings".to_string()))?;
+
+        let client = SimpleFINClient::new(access_url)
+            .map_err(|e| crate::domain::result::Error::Sync(e.to_string()))?;
+
+        let ids = if account_ids.is_empty() { None } else { Some(account_ids) };
+        let synced = client.get_transactions(start_date, end_date, ids)
+            .map_err(|e| crate::domain::result::Error::Sync(e.to_string()))?;
+
+        Ok(FetchTransactionsResult {
+            transactions: synced.transactions,
+            warnings: synced.warnings,
+        })
+    }
+}
+
+impl IntegrationProvider for SimpleFINProvider {
+    fn setup(&self, options: &JsonValue) -> DomainResult<JsonValue> {
+        let setup_token = options.get("setupToken")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| crate::domain::result::Error::Config("SimpleFIN setupToken not found in options".to_string()))?;
+
+        // Decode base64 setup token to get claim URL
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(setup_token)
+            .map_err(|_| crate::domain::result::Error::Config("Invalid setup token format".to_string()))?;
+
+        let claim_url = String::from_utf8(decoded)
+            .map_err(|_| crate::domain::result::Error::Config("Invalid setup token encoding".to_string()))?;
+
+        // Claim the token to get access URL
+        let client = reqwest::blocking::Client::builder()
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .map_err(|e| crate::domain::result::Error::Sync(format!("Failed to create HTTP client: {}", e)))?;
+
+        let response = client.post(&claim_url)
+            .send()
+            .map_err(|e| crate::domain::result::Error::Sync(format!("Failed to claim SimpleFIN token: {}", e)))?;
+
+        if !response.status().is_success() {
+            return Err(crate::domain::result::Error::Sync("Failed to verify SimpleFIN token".to_string()));
+        }
+
+        let access_url = response.text()
+            .map_err(|e| crate::domain::result::Error::Sync(format!("Failed to read SimpleFIN response: {}", e)))?;
+
+        if access_url.is_empty() {
+            return Err(crate::domain::result::Error::Sync("No access URL received from SimpleFIN".to_string()));
+        }
+
+        Ok(serde_json::json!({
+            "accessUrl": access_url
+        }))
     }
 }
