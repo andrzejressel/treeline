@@ -14,6 +14,7 @@ pub mod tag;
 use std::path::PathBuf;
 use anyhow::{Result, Context};
 use treeline_core::TreelineContext;
+use treeline_core::services::EncryptionService;
 
 /// Get the treeline directory from environment or default
 pub fn get_treeline_dir() -> PathBuf {
@@ -34,10 +35,31 @@ pub fn get_context() -> Result<TreelineContext> {
     std::fs::create_dir_all(&treeline_dir)
         .with_context(|| format!("Failed to create treeline directory: {:?}", treeline_dir))?;
 
-    // Check for password in environment
-    let password = std::env::var("TL_DB_PASSWORD").ok();
+    // Determine encryption key
+    // Priority: TL_DB_KEY (pre-derived) > TL_DB_PASSWORD (needs derivation)
+    let encryption_key = if let Ok(key) = std::env::var("TL_DB_KEY") {
+        // Already derived key (used by Tauri app)
+        Some(key)
+    } else if let Ok(password) = std::env::var("TL_DB_PASSWORD") {
+        // Password that needs derivation
+        let config = treeline_core::config::Config::load(&treeline_dir).unwrap_or_default();
+        let db_filename = if config.demo_mode { "demo.duckdb" } else { "treeline.duckdb" };
+        let db_path = treeline_dir.join(db_filename);
 
-    TreelineContext::new(&treeline_dir, password.as_deref())
+        let encryption_service = EncryptionService::new(treeline_dir.clone(), db_path);
+        if encryption_service.is_encrypted().unwrap_or(false) {
+            // Derive key from password
+            Some(encryption_service.derive_key_for_connection(&password)
+                .context("Failed to derive encryption key from password")?)
+        } else {
+            // Database not encrypted, don't need a key
+            None
+        }
+    } else {
+        None
+    };
+
+    TreelineContext::new(&treeline_dir, encryption_key.as_deref())
         .context("Failed to initialize treeline context")
 }
 
