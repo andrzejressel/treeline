@@ -50,8 +50,8 @@ impl DuckDbRepository {
         // Explicitly load required extensions (since autoloading is disabled)
         // JSON: needed for json_extract_string, etc.
         conn.execute("LOAD json", [])?;
-        // ICU: needed for current_date, date functions in some DuckDB builds
-        let _ = conn.execute("LOAD icu", []); // Ignore errors - ICU may not be available
+        // Note: ICU is NOT loaded - all date functions now use Rust-computed dates
+        // to avoid ICU extension dependency and macOS code signing issues
 
         Ok(Self {
             conn: Mutex::new(conn),
