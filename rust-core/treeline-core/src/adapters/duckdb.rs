@@ -47,6 +47,10 @@ impl DuckDbRepository {
             Connection::open_with_flags(db_path, config)?
         };
 
+        // Explicitly load the JSON extension (needed for json_extract_string, etc.)
+        // This is safe because the json extension is bundled with DuckDB
+        conn.execute("LOAD json", [])?;
+
         Ok(Self {
             conn: Mutex::new(conn),
             db_path: db_path.to_path_buf(),
