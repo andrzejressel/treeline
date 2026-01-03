@@ -24,9 +24,13 @@ impl DuckDbRepository {
     /// For encrypted databases, uses DuckDB's ATTACH with ENCRYPTION_KEY.
     /// The key should be the hex-encoded derived key from Argon2.
     pub fn new(db_path: &Path, encryption_key: Option<&str>) -> Result<Self> {
+        // IMPORTANT: Disable extension autoloading to avoid macOS code signing issues
+        // (cached extensions in ~/.duckdb/extensions may have different Team IDs)
         let conn = if let Some(key) = encryption_key {
             // Encrypted database: open in-memory first, then ATTACH encrypted file
-            let conn = Connection::open_in_memory()?;
+            let config = duckdb::Config::default()
+                .enable_autoload_extension(false)?;
+            let conn = Connection::open_in_memory_with_flags(config)?;
             conn.execute(
                 &format!(
                     "ATTACH '{}' AS main_db (ENCRYPTION_KEY '{}')",
@@ -38,7 +42,9 @@ impl DuckDbRepository {
             conn.execute("USE main_db", [])?;
             conn
         } else {
-            Connection::open(db_path)?
+            let config = duckdb::Config::default()
+                .enable_autoload_extension(false)?;
+            Connection::open_with_flags(db_path, config)?
         };
 
         Ok(Self {

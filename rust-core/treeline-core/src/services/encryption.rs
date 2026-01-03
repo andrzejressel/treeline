@@ -142,8 +142,12 @@ impl EncryptionService {
         }
 
         // Export original database to parquet files
+        // IMPORTANT: Disable extension autoloading to avoid macOS code signing issues
         {
-            let conn = Connection::open(&self.db_path)
+            let config = duckdb::Config::default()
+                .enable_autoload_extension(false)
+                .context("Failed to configure database")?;
+            let conn = Connection::open_with_flags(&self.db_path, config)
                 .context("Failed to open original database")?;
             conn.execute_batch(&format!(
                 "EXPORT DATABASE '{}' (FORMAT PARQUET)",
@@ -153,7 +157,10 @@ impl EncryptionService {
 
         // Create new encrypted database and import data
         {
-            let conn = Connection::open_in_memory()
+            let config = duckdb::Config::default()
+                .enable_autoload_extension(false)
+                .context("Failed to configure database")?;
+            let conn = Connection::open_in_memory_with_flags(config)
                 .context("Failed to open in-memory connection")?;
 
             // Attach encrypted database
@@ -210,8 +217,12 @@ impl EncryptionService {
         let key_hex = hex::encode(&key);
 
         // Verify password by attempting to read the encrypted database
+        // IMPORTANT: Disable extension autoloading to avoid macOS code signing issues
         {
-            let conn = Connection::open_in_memory()
+            let config = duckdb::Config::default()
+                .enable_autoload_extension(false)
+                .context("Failed to configure database")?;
+            let conn = Connection::open_in_memory_with_flags(config)
                 .context("Failed to open in-memory connection")?;
             conn.execute_batch(&format!(
                 "ATTACH '{}' AS enc (ENCRYPTION_KEY '{}', READ_ONLY)",
@@ -249,7 +260,10 @@ impl EncryptionService {
 
         // Export encrypted database to parquet files
         {
-            let conn = Connection::open_in_memory()
+            let config = duckdb::Config::default()
+                .enable_autoload_extension(false)
+                .context("Failed to configure database")?;
+            let conn = Connection::open_in_memory_with_flags(config)
                 .context("Failed to open in-memory connection")?;
             conn.execute_batch(&format!(
                 "ATTACH '{}' AS enc (ENCRYPTION_KEY '{}', READ_ONLY)",
@@ -266,7 +280,10 @@ impl EncryptionService {
 
         // Create new unencrypted database and import data
         {
-            let conn = Connection::open(&temp_db_path)
+            let config = duckdb::Config::default()
+                .enable_autoload_extension(false)
+                .context("Failed to configure database")?;
+            let conn = Connection::open_with_flags(&temp_db_path, config)
                 .context("Failed to create new unencrypted database")?;
             conn.execute_batch(&format!(
                 "IMPORT DATABASE '{}'",
