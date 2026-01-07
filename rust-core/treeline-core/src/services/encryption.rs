@@ -141,7 +141,7 @@ impl EncryptionService {
             fs::remove_file(&temp_db_path)?;
         }
 
-        // Export original database to parquet files
+        // Export original database to CSV files (default format, no extensions needed)
         // IMPORTANT: Disable extension autoloading to avoid macOS code signing issues
         {
             let config = duckdb::Config::default()
@@ -150,7 +150,7 @@ impl EncryptionService {
             let conn = Connection::open_with_flags(&self.db_path, config)
                 .context("Failed to open original database")?;
             conn.execute_batch(&format!(
-                "EXPORT DATABASE '{}' (FORMAT PARQUET)",
+                "EXPORT DATABASE '{}'",
                 export_path.display()
             )).context("Failed to export database")?;
         }
@@ -266,14 +266,16 @@ impl EncryptionService {
             let conn = Connection::open_in_memory_with_flags(config)
                 .context("Failed to open in-memory connection")?;
             conn.execute_batch(&format!(
-                "ATTACH '{}' AS enc (ENCRYPTION_KEY '{}', READ_ONLY)",
+                "ATTACH '{}' AS enc (ENCRYPTION_KEY '{}')",
                 self.db_path.display(),
                 key_hex
             )).context("Failed to attach encrypted database")?;
 
             conn.execute_batch("USE enc").context("Failed to use encrypted database")?;
+
+            // Export to CSV (default format, no extensions needed)
             conn.execute_batch(&format!(
-                "EXPORT DATABASE '{}' (FORMAT PARQUET)",
+                "EXPORT DATABASE '{}'",
                 export_path.display()
             )).context("Failed to export encrypted database")?;
         }
