@@ -9,6 +9,7 @@ pub mod balance;
 mod user;
 mod backup;
 mod encryption;
+mod rule;
 pub mod result;
 
 pub use account::Account;
@@ -17,3 +18,4 @@ pub use balance::BalanceSnapshot;
 pub use user::User;
 pub use backup::BackupMetadata;
 pub use encryption::{Argon2Params, EncryptionMetadata, EncryptionStatus};
+pub use rule::AutoTagRule;

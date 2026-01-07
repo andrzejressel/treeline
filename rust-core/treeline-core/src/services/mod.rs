@@ -20,7 +20,7 @@ pub mod migration;
 pub use status::{StatusService, StatusSummary, AccountSummary, DateRange};
 pub use sync::SyncService;
 pub use query::QueryService;
-pub use tag::{TagService, TagResult, TagResultEntry};
+pub use tag::{TagService, TagResult, TagResultEntry, AutoTagResult};
 pub use backup::BackupService;
 pub use compact::CompactService;
 pub use doctor::DoctorService;

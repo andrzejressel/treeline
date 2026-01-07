@@ -14,6 +14,7 @@ use uuid::Uuid;
 use crate::adapters::duckdb::DuckDbRepository;
 use crate::config::{ColumnMappings, Config, ImportProfile, ImportOptions as ConfigImportOptions};
 use crate::domain::Transaction;
+use crate::services::TagService;
 
 /// Import options for CSV processing
 #[derive(Debug, Default)]
@@ -27,12 +28,14 @@ pub struct ImportOptions {
 /// Import service for CSV imports
 pub struct ImportService {
     repository: Arc<DuckDbRepository>,
+    tag_service: TagService,
     treeline_dir: PathBuf,
 }
 
 impl ImportService {
     pub fn new(repository: Arc<DuckDbRepository>, treeline_dir: PathBuf) -> Self {
-        Self { repository, treeline_dir }
+        let tag_service = TagService::new(repository.clone());
+        Self { repository, tag_service, treeline_dir }
     }
 
     /// List saved import profiles
@@ -210,8 +213,17 @@ impl ImportService {
             tx.external_ids.insert("csv_import.batch_id".to_string(), batch_id.clone());
         }
 
+        // Collect IDs for auto-tagging
+        let new_tx_ids: Vec<Uuid> = new_transactions.iter().map(|tx| tx.id).collect();
+
         for tx in &new_transactions {
             self.repository.upsert_transaction(tx)?;
+        }
+
+        // Apply auto-tag rules to newly imported transactions
+        if !new_tx_ids.is_empty() {
+            // Best-effort tagging - don't fail import if rules fail
+            let _ = self.tag_service.apply_auto_tag_rules(&new_tx_ids);
         }
 
         Ok(ImportResult {

@@ -13,10 +13,12 @@ use crate::adapters::duckdb::DuckDbRepository;
 use crate::adapters::demo::DemoDataProvider;
 use crate::adapters::simplefin::SimpleFINProvider;
 use crate::ports::{DataAggregationProvider, IntegrationProvider};
+use crate::services::TagService;
 
 /// Sync service for account and transaction synchronization
 pub struct SyncService {
     repository: Arc<DuckDbRepository>,
+    tag_service: TagService,
     treeline_dir: PathBuf,
     providers: HashMap<String, Arc<dyn DataAggregationProvider>>,
     integration_providers: HashMap<String, Arc<dyn IntegrationProvider>>,
@@ -36,8 +38,11 @@ impl SyncService {
         providers.insert("simplefin".to_string(), simplefin.clone());
         integration_providers.insert("simplefin".to_string(), simplefin);
 
+        let tag_service = TagService::new(repository.clone());
+
         Self {
             repository,
+            tag_service,
             treeline_dir,
             providers,
             integration_providers,
@@ -231,6 +236,7 @@ impl SyncService {
     ) -> Result<(i64, i64)> {
         let mut new_count = 0i64;
         let mut skipped_count = 0i64;
+        let mut new_tx_ids: Vec<Uuid> = Vec::new();
 
         for (ext_account_id, mut tx) in transactions {
             // Map to internal account ID
@@ -260,9 +266,16 @@ impl SyncService {
             } else {
                 new_count += 1;
                 if !dry_run {
+                    new_tx_ids.push(tx.id);
                     self.repository.upsert_transaction(&tx)?;
                 }
             }
+        }
+
+        // Apply auto-tag rules to newly synced transactions
+        if !dry_run && !new_tx_ids.is_empty() {
+            // Best-effort tagging - don't fail sync if rules fail
+            let _ = self.tag_service.apply_auto_tag_rules(&new_tx_ids);
         }
 
         Ok((new_count, skipped_count))

@@ -9,7 +9,7 @@ use duckdb::{Connection, params};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use crate::domain::{Account, BalanceSnapshot, Transaction};
+use crate::domain::{Account, AutoTagRule, BalanceSnapshot, Transaction};
 use crate::services::MigrationService;
 
 /// DuckDB repository implementation
@@ -985,6 +985,85 @@ impl DuckDbRepository {
             |row| row.get(0),
         )?;
         Ok(count > 0)
+    }
+
+    // ========================================================================
+    // Auto-Tag Rules
+    // ========================================================================
+
+    /// Get all enabled auto-tag rules, ordered by sort_order
+    pub fn get_enabled_auto_tag_rules(&self) -> Result<Vec<AutoTagRule>> {
+        let conn = self.conn.lock().unwrap();
+        let mut stmt = conn.prepare(
+            "SELECT rule_id, name, sql_condition, tags, enabled, sort_order
+             FROM sys_transactions_rules
+             WHERE enabled = true
+             ORDER BY sort_order, created_at"
+        )?;
+
+        let rules = stmt.query_map([], |row| {
+            let tags_str: String = row.get(3).unwrap_or_else(|_| "[]".to_string());
+            Ok(AutoTagRule {
+                rule_id: row.get(0)?,
+                name: row.get(1)?,
+                sql_condition: row.get(2)?,
+                tags: parse_duckdb_array(&tags_str),
+                enabled: row.get(4)?,
+                sort_order: row.get(5)?,
+            })
+        })?;
+
+        let mut result = Vec::new();
+        for rule in rules {
+            result.push(rule?);
+        }
+        Ok(result)
+    }
+
+    /// Get transaction IDs that match a SQL condition from a given set of IDs
+    ///
+    /// The sql_condition should be a valid SQL WHERE clause fragment
+    /// (e.g., "description ILIKE '%walmart%'" or "amount < 0")
+    pub fn get_transactions_matching_rule(
+        &self,
+        tx_ids: &[Uuid],
+        sql_condition: &str,
+    ) -> Result<Vec<Uuid>> {
+        if tx_ids.is_empty() {
+            return Ok(Vec::new());
+        }
+
+        let conn = self.conn.lock().unwrap();
+
+        // Build IN clause with UUIDs
+        let id_list: Vec<String> = tx_ids.iter().map(|id| format!("'{}'", id)).collect();
+        let in_clause = id_list.join(", ");
+
+        // Build query with user's SQL condition
+        // Use the transactions view to ensure computed columns are available
+        let sql = format!(
+            "SELECT transaction_id FROM transactions
+             WHERE transaction_id IN ({})
+             AND ({})",
+            in_clause,
+            sql_condition
+        );
+
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map([], |row| {
+            let id_str: String = row.get(0)?;
+            Ok(id_str)
+        })?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            if let Ok(id_str) = row {
+                if let Ok(uuid) = Uuid::parse_str(&id_str) {
+                    result.push(uuid);
+                }
+            }
+        }
+        Ok(result)
     }
 }
 

@@ -18,6 +18,87 @@ impl TagService {
         Self { repository }
     }
 
+    /// Apply auto-tag rules to a set of transactions
+    ///
+    /// This fetches all enabled rules and applies matching tags to the given transactions.
+    /// Rules are additive - they only add tags, never remove existing ones.
+    /// All matching rules apply (not first-match-wins).
+    pub fn apply_auto_tag_rules(&self, tx_ids: &[Uuid]) -> Result<AutoTagResult> {
+        if tx_ids.is_empty() {
+            return Ok(AutoTagResult {
+                rules_evaluated: 0,
+                rules_matched: 0,
+                transactions_tagged: 0,
+            });
+        }
+
+        // Get all enabled rules
+        let rules = self.repository.get_enabled_auto_tag_rules()?;
+        if rules.is_empty() {
+            return Ok(AutoTagResult {
+                rules_evaluated: 0,
+                rules_matched: 0,
+                transactions_tagged: 0,
+            });
+        }
+
+        let mut rules_matched = 0;
+        let mut transactions_tagged_set = std::collections::HashSet::new();
+
+        // For each rule, find matching transactions and apply tags
+        for rule in &rules {
+            // Skip rules with no tags to apply
+            if rule.tags.is_empty() {
+                continue;
+            }
+
+            // Find which transactions match this rule's condition
+            let matching_tx_ids = match self.repository.get_transactions_matching_rule(tx_ids, &rule.sql_condition) {
+                Ok(ids) => ids,
+                Err(_e) => {
+                    // Rule condition failed (invalid SQL?) - skip this rule and continue
+                    // eprintln!("Auto-tag rule '{}' failed: {}. Skipping.", rule.name, _e);
+                    continue;
+                }
+            };
+
+            if matching_tx_ids.is_empty() {
+                continue;
+            }
+
+            rules_matched += 1;
+
+            // Apply tags to each matching transaction (additive)
+            for tx_id in &matching_tx_ids {
+                // Get existing tags
+                if let Some(tx) = self.repository.get_transaction_by_id(&tx_id.to_string())? {
+                    let mut tags = tx.tags;
+
+                    // Merge new tags (additive, no duplicates)
+                    let mut changed = false;
+                    for tag in &rule.tags {
+                        if !tags.contains(tag) {
+                            tags.push(tag.clone());
+                            changed = true;
+                        }
+                    }
+
+                    // Update if we added new tags
+                    if changed {
+                        self.repository.update_transaction_tags(&tx_id.to_string(), &tags)?;
+                        transactions_tagged_set.insert(*tx_id);
+                    }
+                }
+            }
+        }
+
+        Ok(AutoTagResult {
+            rules_evaluated: rules.len() as i64,
+            rules_matched,
+            transactions_tagged: transactions_tagged_set.len() as i64,
+        })
+    }
+
     /// Apply tags to transactions
     pub fn apply_tags(&self, tx_ids: &[String], tags: &[String], replace: bool) -> Result<TagResult> {
         let mut results = Vec::new();
@@ -99,4 +180,15 @@ pub struct TagResultEntry {
     pub success: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+}
+
+/// Result of applying auto-tag rules
+#[derive(Debug, Serialize)]
+pub struct AutoTagResult {
+    /// Number of rules evaluated
+    pub rules_evaluated: i64,
+    /// Number of rules that matched at least one transaction
+    pub rules_matched: i64,
+    /// Number of transactions that had tags applied
+    pub transactions_tagged: i64,
 }
