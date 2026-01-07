@@ -74,7 +74,7 @@ This tags the release and pushes to GitHub. The included GitHub Action automatic
 ## Submit to Community Plugins
 
 1. Ensure your plugin has at least one GitHub release
-2. Open a PR to [treeline-releases](https://github.com/treeline-money/treeline-releases) adding your plugin to `community-plugins.json`:
+2. Open a PR to [treeline-releases](https://github.com/treeline-money/treeline-releases) adding your plugin to `plugins.json`:
 
 ```json
 {

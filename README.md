@@ -465,7 +465,7 @@ This tags the release and pushes to GitHub. The workflow automatically builds an
 Once your plugin has a GitHub release:
 
 1. Fork [treeline-releases](https://github.com/treeline-money/treeline-releases)
-2. Add your plugin to `community-plugins.json`:
+2. Add your plugin to `plugins.json`:
 
 ```json
 {
