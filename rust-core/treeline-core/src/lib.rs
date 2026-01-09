@@ -29,6 +29,7 @@ pub use domain::{
     User, BackupMetadata, EncryptionMetadata, EncryptionStatus,
 };
 pub use domain::result::{Error, OperationResult};
+pub use adapters::duckdb::QueryResult;
 
 /// Main context for Treeline operations
 ///

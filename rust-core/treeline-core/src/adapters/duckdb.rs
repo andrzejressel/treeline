@@ -2,8 +2,10 @@
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
+use std::thread;
+use std::time::Duration;
 
-use anyhow::{Context, Result};
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use duckdb::{Connection, params};
 use rust_decimal::Decimal;
@@ -11,6 +13,24 @@ use uuid::Uuid;
 
 use crate::domain::{Account, AutoTagRule, BalanceSnapshot, Transaction};
 use crate::services::MigrationService;
+
+/// Maximum number of retries when database file is locked
+const MAX_RETRIES: u32 = 5;
+
+/// Initial retry delay in milliseconds (doubles each retry: 50, 100, 200, 400, 800ms)
+const INITIAL_RETRY_DELAY_MS: u64 = 50;
+
+/// Check if an error message indicates a file locking issue that should be retried
+fn is_retryable_error(err_msg: &str) -> bool {
+    let lower = err_msg.to_lowercase();
+    // Windows error messages
+    lower.contains("being used by another process")
+        || lower.contains("cannot access the file")
+        // Unix/macOS error messages
+        || lower.contains("resource temporarily unavailable")
+        || lower.contains("database is locked")
+        || lower.contains("file is already open")
+}
 
 /// DuckDB repository implementation
 pub struct DuckDbRepository {
@@ -24,7 +44,50 @@ impl DuckDbRepository {
     ///
     /// For encrypted databases, uses DuckDB's ATTACH with ENCRYPTION_KEY.
     /// The key should be the hex-encoded derived key from Argon2.
+    ///
+    /// Includes retry logic with exponential backoff for file locking errors,
+    /// which can occur when multiple operations try to access the database
+    /// simultaneously (e.g., during app startup with auto-sync).
     pub fn new(db_path: &Path, encryption_key: Option<&str>) -> Result<Self> {
+        let mut last_error = None;
+
+        for attempt in 0..MAX_RETRIES {
+            match Self::try_open_connection(db_path, encryption_key) {
+                Ok(conn) => {
+                    return Ok(Self {
+                        conn: Mutex::new(conn),
+                        db_path: db_path.to_path_buf(),
+                        encryption_key: encryption_key.map(|k| k.to_string()),
+                    });
+                }
+                Err(e) => {
+                    let err_msg = e.to_string();
+                    if is_retryable_error(&err_msg) && attempt < MAX_RETRIES - 1 {
+                        // Exponential backoff: 50ms, 100ms, 200ms, 400ms
+                        let delay = Duration::from_millis(INITIAL_RETRY_DELAY_MS * 2u64.pow(attempt));
+                        eprintln!(
+                            "[treeline] Database busy, retrying in {}ms (attempt {}/{}): {}",
+                            delay.as_millis(),
+                            attempt + 1,
+                            MAX_RETRIES,
+                            err_msg
+                        );
+                        thread::sleep(delay);
+                        last_error = Some(e);
+                        continue;
+                    }
+                    // Non-retryable error or max retries reached
+                    return Err(e);
+                }
+            }
+        }
+
+        // Should only reach here if all retries failed
+        Err(last_error.unwrap_or_else(|| anyhow!("Failed to open database after {} retries", MAX_RETRIES)))
+    }
+
+    /// Attempt to open a database connection (called by new() with retry logic)
+    fn try_open_connection(db_path: &Path, encryption_key: Option<&str>) -> Result<Connection> {
         // IMPORTANT: Disable extension autoloading to avoid macOS code signing issues
         // (cached extensions in ~/.duckdb/extensions may have different Team IDs)
         let conn = if let Some(key) = encryption_key {
@@ -52,11 +115,7 @@ impl DuckDbRepository {
         // No LOAD required - it's compiled into DuckDB
         // ICU is NOT included - all date functions use Rust-computed dates
 
-        Ok(Self {
-            conn: Mutex::new(conn),
-            db_path: db_path.to_path_buf(),
-            encryption_key: encryption_key.map(|k| k.to_string()),
-        })
+        Ok(conn)
     }
 
     /// Run database migrations using the MigrationService
@@ -566,6 +625,181 @@ impl DuckDbRepository {
         })
     }
 
+    /// Execute arbitrary SQL (read or write)
+    ///
+    /// Unlike `execute_query`, this method allows both SELECT and write operations.
+    /// For SELECT queries, returns columns and rows.
+    /// For write queries (INSERT/UPDATE/DELETE), returns affected_rows count.
+    pub fn execute_sql(&self, sql: &str) -> Result<QueryResult> {
+        let sql_trimmed = sql.trim();
+        let first_word = sql_trimmed.split_whitespace().next().unwrap_or("").to_uppercase();
+
+        let is_select = first_word == "SELECT"
+            || first_word == "WITH"
+            || first_word == "DESCRIBE"
+            || first_word == "SHOW";
+
+        let conn = self.conn.lock().unwrap();
+
+        if is_select {
+            // Read query - return columns and rows
+            let mut stmt = conn.prepare(sql)?;
+            let mut result_rows = stmt.query([])?;
+
+            let mut rows: Vec<Vec<serde_json::Value>> = Vec::new();
+            let mut column_count = 0;
+
+            while let Some(row) = result_rows.next()? {
+                if rows.is_empty() {
+                    column_count = row.as_ref().column_count();
+                }
+
+                let mut row_values: Vec<serde_json::Value> = Vec::new();
+                for i in 0..column_count {
+                    let value = self.get_column_value(row, i);
+                    row_values.push(value);
+                }
+                rows.push(row_values);
+            }
+
+            drop(result_rows);
+
+            let columns: Vec<String> = if column_count > 0 {
+                (0..column_count)
+                    .map(|i| stmt.column_name(i).map(|s| s.to_string()).unwrap_or_else(|_| format!("col{}", i)))
+                    .collect()
+            } else {
+                let count = stmt.column_count();
+                (0..count)
+                    .map(|i| stmt.column_name(i).map(|s| s.to_string()).unwrap_or_else(|_| format!("col{}", i)))
+                    .collect()
+            };
+
+            let row_count = rows.len();
+
+            Ok(QueryResult {
+                columns,
+                rows,
+                row_count,
+            })
+        } else {
+            // Write query - return affected rows
+            let affected = conn.execute(sql, [])?;
+
+            Ok(QueryResult {
+                columns: vec!["affected_rows".to_string()],
+                rows: vec![vec![serde_json::json!(affected)]],
+                row_count: 1,
+            })
+        }
+    }
+
+    /// Execute parameterized SQL (read or write)
+    ///
+    /// Parameters are passed as JSON values and bound to ? placeholders.
+    pub fn execute_sql_with_params(&self, sql: &str, params: &[serde_json::Value]) -> Result<QueryResult> {
+        let sql_trimmed = sql.trim();
+        let first_word = sql_trimmed.split_whitespace().next().unwrap_or("").to_uppercase();
+
+        let is_select = first_word == "SELECT"
+            || first_word == "WITH"
+            || first_word == "DESCRIBE"
+            || first_word == "SHOW";
+
+        let conn = self.conn.lock().unwrap();
+
+        // Convert JSON params to DuckDB params
+        let duckdb_params: Vec<Box<dyn duckdb::ToSql>> = params.iter().map(|v| {
+            Self::json_to_duckdb_param(v)
+        }).collect();
+        let param_refs: Vec<&dyn duckdb::ToSql> = duckdb_params.iter().map(|b| b.as_ref()).collect();
+
+        if is_select {
+            // Read query - return columns and rows
+            let mut stmt = conn.prepare(sql)?;
+            let mut result_rows = stmt.query(param_refs.as_slice())?;
+
+            let mut rows: Vec<Vec<serde_json::Value>> = Vec::new();
+            let mut column_count = 0;
+
+            while let Some(row) = result_rows.next()? {
+                if rows.is_empty() {
+                    column_count = row.as_ref().column_count();
+                }
+
+                let mut row_values: Vec<serde_json::Value> = Vec::new();
+                for i in 0..column_count {
+                    let value = self.get_column_value(row, i);
+                    row_values.push(value);
+                }
+                rows.push(row_values);
+            }
+
+            drop(result_rows);
+
+            let columns: Vec<String> = if column_count > 0 {
+                (0..column_count)
+                    .map(|i| stmt.column_name(i).map(|s| s.to_string()).unwrap_or_else(|_| format!("col{}", i)))
+                    .collect()
+            } else {
+                let count = stmt.column_count();
+                (0..count)
+                    .map(|i| stmt.column_name(i).map(|s| s.to_string()).unwrap_or_else(|_| format!("col{}", i)))
+                    .collect()
+            };
+
+            let row_count = rows.len();
+
+            Ok(QueryResult {
+                columns,
+                rows,
+                row_count,
+            })
+        } else {
+            // Write query - return affected rows
+            let mut stmt = conn.prepare(sql)?;
+            let affected = stmt.execute(param_refs.as_slice())?;
+
+            Ok(QueryResult {
+                columns: vec!["affected_rows".to_string()],
+                rows: vec![vec![serde_json::json!(affected)]],
+                row_count: 1,
+            })
+        }
+    }
+
+    /// Convert JSON value to DuckDB parameter
+    fn json_to_duckdb_param(value: &serde_json::Value) -> Box<dyn duckdb::ToSql> {
+        match value {
+            serde_json::Value::Null => Box::new(None::<String>),
+            serde_json::Value::Bool(b) => Box::new(*b),
+            serde_json::Value::Number(n) => {
+                if let Some(i) = n.as_i64() {
+                    Box::new(i)
+                } else if let Some(f) = n.as_f64() {
+                    Box::new(f)
+                } else {
+                    Box::new(n.to_string())
+                }
+            }
+            serde_json::Value::String(s) => Box::new(s.clone()),
+            serde_json::Value::Array(arr) => {
+                // Convert array to comma-separated string
+                let strings: Vec<String> = arr.iter().map(|v| {
+                    match v {
+                        serde_json::Value::String(s) => s.clone(),
+                        _ => v.to_string(),
+                    }
+                }).collect();
+                Box::new(strings.join(","))
+            }
+            serde_json::Value::Object(_) => {
+                // Convert object to JSON string
+                Box::new(value.to_string())
+            }
+        }
+    }
+
     fn get_column_value(&self, row: &duckdb::Row, idx: usize) -> serde_json::Value {
         use duckdb::types::ValueRef;
 
@@ -584,7 +818,16 @@ impl DuckDbRepository {
             Ok(ValueRef::UBigInt(i)) => serde_json::json!(i),
             Ok(ValueRef::Float(f)) => serde_json::json!(f),
             Ok(ValueRef::Double(f)) => serde_json::json!(f),
-            Ok(ValueRef::Decimal(d)) => serde_json::json!(d.to_string()),
+            Ok(ValueRef::Decimal(d)) => {
+                // Convert Decimal to f64 for JSON compatibility
+                // This matches the old Arrow-based behavior
+                use std::str::FromStr;
+                let s = d.to_string();
+                match f64::from_str(&s) {
+                    Ok(f) => serde_json::json!(f),
+                    Err(_) => serde_json::Value::String(s), // Fallback for very large decimals
+                }
+            }
             Ok(ValueRef::Text(bytes)) => {
                 let s = String::from_utf8_lossy(bytes).to_string();
                 serde_json::Value::String(s)
