@@ -12,6 +12,7 @@ use uuid::Uuid;
 use crate::adapters::duckdb::DuckDbRepository;
 use crate::adapters::demo::DemoDataProvider;
 use crate::adapters::simplefin::SimpleFINProvider;
+use crate::adapters::lunchflow::LunchflowProvider;
 use crate::ports::{DataAggregationProvider, IntegrationProvider};
 use crate::services::TagService;
 
@@ -37,6 +38,11 @@ impl SyncService {
         let simplefin = Arc::new(SimpleFINProvider::new());
         providers.insert("simplefin".to_string(), simplefin.clone());
         integration_providers.insert("simplefin".to_string(), simplefin);
+
+        // Register Lunchflow provider (global bank connections)
+        let lunchflow = Arc::new(LunchflowProvider::new());
+        providers.insert("lunchflow".to_string(), lunchflow.clone());
+        integration_providers.insert("lunchflow".to_string(), lunchflow);
 
         let tag_service = TagService::new(repository.clone());
 
@@ -320,6 +326,21 @@ impl SyncService {
         self.setup_integration("simplefin", &serde_json::json!({
             "setupToken": setup_token
         }))
+    }
+
+    /// Set up Lunchflow integration (convenience method)
+    ///
+    /// # Arguments
+    /// * `api_key` - The Lunchflow API key from the user's dashboard
+    /// * `base_url` - Optional custom base URL for testing (None = production)
+    pub fn setup_lunchflow(&self, api_key: &str, base_url: Option<&str>) -> Result<()> {
+        let mut options = serde_json::json!({
+            "apiKey": api_key
+        });
+        if let Some(url) = base_url {
+            options["baseUrl"] = serde_json::json!(url);
+        }
+        self.setup_integration("lunchflow", &options)
     }
 }
 
