@@ -16,6 +16,28 @@ use crate::config::{ColumnMappings, Config, ImportProfile, ImportOptions as Conf
 use crate::domain::Transaction;
 use crate::services::TagService;
 
+/// Number format for parsing amounts
+#[derive(Debug, Clone, Copy, Default, PartialEq)]
+pub enum NumberFormat {
+    /// US format: 1,234.56 (comma=thousands, dot=decimal)
+    #[default]
+    Us,
+    /// European format: 1.234,56 (dot=thousands, comma=decimal)
+    Eu,
+    /// European format with space thousands: 1 234,56
+    EuSpace,
+}
+
+impl NumberFormat {
+    pub fn from_str(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "eu" => NumberFormat::Eu,
+            "eu_space" => NumberFormat::EuSpace,
+            _ => NumberFormat::Us,
+        }
+    }
+}
+
 /// Import options for CSV processing
 #[derive(Debug, Default)]
 pub struct ImportOptions {
@@ -23,6 +45,10 @@ pub struct ImportOptions {
     pub debit_negative: bool,
     /// Flip signs on all amounts (for credit card statements)
     pub flip_signs: bool,
+    /// Number of rows to skip before the header row
+    pub skip_rows: u32,
+    /// Number format for parsing amounts
+    pub number_format: NumberFormat,
 }
 
 /// Import service for CSV imports
@@ -61,37 +87,112 @@ impl ImportService {
         let account_uuid = Uuid::parse_str(account_id)
             .context("Invalid account ID")?;
 
-        // Read CSV
-        let mut reader = csv::Reader::from_path(file_path)
-            .context("Failed to read CSV file")?;
+        // Read CSV with optional row skipping
+        let (headers, records) = if options.skip_rows > 0 {
+            // Use raw reader to skip rows before header
+            use std::io::{BufRead, BufReader};
+            use std::fs::File;
 
-        let headers = reader.headers()?.clone();
+            let file = File::open(file_path).context("Failed to open CSV file")?;
+            let buf_reader = BufReader::new(file);
+            let mut lines = buf_reader.lines();
+
+            // Skip leading rows
+            for _ in 0..options.skip_rows {
+                lines.next();
+            }
+
+            // Read header line
+            let header_line = lines.next()
+                .ok_or_else(|| anyhow::anyhow!("No header row found after skipping {} rows", options.skip_rows))?
+                .context("Failed to read header line")?;
+
+            // Detect delimiter (semicolon common in EU, comma in US)
+            let semicolons = header_line.matches(';').count();
+            let commas = header_line.matches(',').count();
+            let tabs = header_line.matches('\t').count();
+            let delimiter = if semicolons > commas && semicolons > tabs {
+                b';'
+            } else if tabs > commas && tabs > semicolons {
+                b'\t'
+            } else {
+                b','
+            };
+
+            // Parse headers using csv crate with detected delimiter
+            let mut header_reader = csv::ReaderBuilder::new()
+                .has_headers(false)
+                .delimiter(delimiter)
+                .from_reader(header_line.as_bytes());
+
+            let header_record = header_reader.records().next()
+                .ok_or_else(|| anyhow::anyhow!("Empty header line"))?
+                .context("Failed to parse header line")?;
+
+            // Clean headers: trim and strip # prefix
+            let headers: Vec<String> = header_record.iter()
+                .map(|h| h.trim().trim_start_matches('#').to_string())
+                .collect();
+
+            // Collect remaining lines as data
+            let remaining_content: String = lines
+                .filter_map(|l| l.ok())
+                .collect::<Vec<_>>()
+                .join("\n");
+
+            // Parse remaining content as CSV records with same delimiter
+            let mut data_reader = csv::ReaderBuilder::new()
+                .has_headers(false)
+                .delimiter(delimiter)
+                .from_reader(remaining_content.as_bytes());
+
+            let records: Vec<csv::StringRecord> = data_reader.records()
+                .filter_map(|r| r.ok())
+                .collect();
+
+            (headers, records)
+        } else {
+            // Standard path: first row is header
+            let mut reader = csv::Reader::from_path(file_path)
+                .context("Failed to read CSV file")?;
+
+            // Clean headers: trim and strip # prefix
+            let headers: Vec<String> = reader.headers()?
+                .iter()
+                .map(|h| h.trim().trim_start_matches('#').to_string())
+                .collect();
+
+            let records: Vec<csv::StringRecord> = reader.records()
+                .filter_map(|r| r.ok())
+                .collect();
+
+            (headers, records)
+        };
 
         // Find column indices
-        let date_idx = headers.iter().position(|h| h == mappings.date)
+        let date_idx = headers.iter().position(|h| h == mappings.date.as_str())
             .context(format!("Date column '{}' not found", mappings.date))?;
 
         // Check for debit/credit columns first, fall back to amount
         let debit_idx = mappings.debit.as_ref()
-            .and_then(|d| headers.iter().position(|h| h == d));
+            .and_then(|d| headers.iter().position(|h| h == d.as_str()));
         let credit_idx = mappings.credit.as_ref()
-            .and_then(|c| headers.iter().position(|h| h == c));
+            .and_then(|c| headers.iter().position(|h| h == c.as_str()));
 
         let amount_idx = if debit_idx.is_some() || credit_idx.is_some() {
             None
         } else {
-            Some(headers.iter().position(|h| h == mappings.amount)
+            Some(headers.iter().position(|h| h == mappings.amount.as_str())
                 .context(format!("Amount column '{}' not found", mappings.amount))?)
         };
 
         let desc_idx = mappings.description.as_ref()
-            .and_then(|d| headers.iter().position(|h| h == d));
+            .and_then(|d| headers.iter().position(|h| h == d.as_str()));
 
         let mut transactions = Vec::new();
         let mut skipped = 0;
 
-        for result in reader.records() {
-            let record = result?;
+        for record in &records {
 
             // Parse date
             let date_str = record.get(date_idx).unwrap_or("");
@@ -105,16 +206,16 @@ impl ImportService {
             // Parse amount from either amount column or debit/credit columns
             let amount = if let Some(amt_idx) = amount_idx {
                 let amount_str = record.get(amt_idx).unwrap_or("");
-                parse_amount(amount_str)
+                parse_amount_with_format(amount_str, options.number_format)
             } else {
                 // Handle debit/credit columns
                 // Preserve sign from CSV, only negate if debit_negative option is set
                 let debit = debit_idx
                     .and_then(|i| record.get(i))
-                    .and_then(|s| if s.is_empty() { None } else { parse_amount(s) });
+                    .and_then(|s| if s.is_empty() { None } else { parse_amount_with_format(s, options.number_format) });
                 let credit = credit_idx
                     .and_then(|i| record.get(i))
-                    .and_then(|s| if s.is_empty() { None } else { parse_amount(s) });
+                    .and_then(|s| if s.is_empty() { None } else { parse_amount_with_format(s, options.number_format) });
 
                 match (debit, credit) {
                     (Some(d), None) => {
@@ -362,8 +463,33 @@ fn parse_date(s: &str) -> Option<NaiveDate> {
     None
 }
 
-fn parse_amount(s: &str) -> Option<Decimal> {
+/// Strip currency suffix from amount string (e.g., "100.50 PLN" -> "100.50")
+fn strip_currency_suffix(s: &str) -> &str {
+    const CURRENCIES: &[&str] = &[
+        "PLN", "EUR", "USD", "GBP", "CHF", "CZK", "SEK", "NOK", "DKK",
+        "CAD", "AUD", "JPY", "CNY", "INR", "BRL", "MXN", "KRW", "RUB",
+    ];
     let s = s.trim();
+    for currency in CURRENCIES {
+        if s.ends_with(currency) {
+            return s[..s.len() - currency.len()].trim();
+        }
+    }
+    s
+}
+
+fn parse_amount(s: &str) -> Option<Decimal> {
+    parse_amount_with_format(s, NumberFormat::Us)
+}
+
+fn parse_amount_with_format(s: &str, format: NumberFormat) -> Option<Decimal> {
+    let s = s.trim();
+    if s.is_empty() {
+        return None;
+    }
+
+    // Strip currency suffix first
+    let s = strip_currency_suffix(s);
 
     // Handle parentheses notation for negative numbers: (100.00) -> -100.00
     let (is_negative, s) = if s.starts_with('(') && s.ends_with(')') {
@@ -372,10 +498,30 @@ fn parse_amount(s: &str) -> Option<Decimal> {
         (false, s)
     };
 
-    // Remove currency symbols, commas, whitespace
-    let cleaned: String = s.chars()
+    // Normalize based on format
+    let normalized = match format {
+        NumberFormat::Us => {
+            // US: 1,234.56 - remove commas, keep dots
+            s.replace(',', "")
+        }
+        NumberFormat::Eu => {
+            // EU: 1.234,56 - remove dots (thousands), convert comma to dot (decimal)
+            s.replace('.', "").replace(',', ".")
+        }
+        NumberFormat::EuSpace => {
+            // EU with space: 1 234,56 - remove spaces, convert comma to dot
+            s.replace(' ', "").replace(',', ".")
+        }
+    };
+
+    // Keep only digits, dot, minus
+    let cleaned: String = normalized.chars()
         .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
         .collect();
+
+    if cleaned.is_empty() {
+        return None;
+    }
 
     let mut amount: Decimal = cleaned.parse().ok()?;
 
@@ -491,4 +637,130 @@ pub struct TransactionPreview {
     pub date: String,
     pub amount: String,
     pub description: Option<String>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==========================================================================
+    // parse_amount tests - US format (current behavior)
+    // ==========================================================================
+
+    #[test]
+    fn test_parse_amount_simple_positive() {
+        assert_eq!(parse_amount("100.50"), Some(Decimal::new(10050, 2)));
+    }
+
+    #[test]
+    fn test_parse_amount_simple_negative() {
+        assert_eq!(parse_amount("-50.25"), Some(Decimal::new(-5025, 2)));
+    }
+
+    #[test]
+    fn test_parse_amount_with_comma_thousands() {
+        // US format: 1,234.56
+        assert_eq!(parse_amount("1,234.56"), Some(Decimal::new(123456, 2)));
+    }
+
+    #[test]
+    fn test_parse_amount_with_currency_symbol() {
+        assert_eq!(parse_amount("$100.00"), Some(Decimal::new(10000, 2)));
+        assert_eq!(parse_amount("-$50.00"), Some(Decimal::new(-5000, 2)));
+    }
+
+    #[test]
+    fn test_parse_amount_parentheses_negative() {
+        // Accounting notation: (100.00) means -100.00
+        assert_eq!(parse_amount("(100.00)"), Some(Decimal::new(-10000, 2)));
+        assert_eq!(parse_amount("(1,234.56)"), Some(Decimal::new(-123456, 2)));
+    }
+
+    #[test]
+    fn test_parse_amount_with_whitespace() {
+        assert_eq!(parse_amount("  100.50  "), Some(Decimal::new(10050, 2)));
+    }
+
+    #[test]
+    fn test_parse_amount_empty_string() {
+        assert_eq!(parse_amount(""), None);
+    }
+
+    #[test]
+    fn test_parse_amount_invalid() {
+        assert_eq!(parse_amount("abc"), None);
+    }
+
+    // ==========================================================================
+    // parse_date tests
+    // ==========================================================================
+
+    #[test]
+    fn test_parse_date_iso_format() {
+        // YYYY-MM-DD (ISO)
+        assert_eq!(
+            parse_date("2024-01-15"),
+            Some(NaiveDate::from_ymd_opt(2024, 1, 15).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_parse_date_us_format() {
+        // MM/DD/YYYY (US)
+        assert_eq!(
+            parse_date("12/03/2025"),
+            Some(NaiveDate::from_ymd_opt(2025, 12, 3).unwrap())
+        );
+    }
+
+    #[test]
+    fn test_parse_date_invalid() {
+        assert_eq!(parse_date("not-a-date"), None);
+        assert_eq!(parse_date(""), None);
+    }
+
+    // ==========================================================================
+    // European format tests - with proper format parameter
+    // ==========================================================================
+
+    #[test]
+    fn test_parse_amount_european_format_comma_decimal() {
+        // EU format: 1.234,56 (dot=thousands, comma=decimal)
+        let result = parse_amount_with_format("1.234,56", NumberFormat::Eu);
+        assert_eq!(result, Some(Decimal::new(123456, 2)),
+            "EU format 1.234,56 should parse as 1234.56");
+    }
+
+    #[test]
+    fn test_parse_amount_european_space_thousands() {
+        // EU format with space thousands: 8 019,40 PLN
+        let result = parse_amount_with_format("8 019,40 PLN", NumberFormat::EuSpace);
+        assert_eq!(result, Some(Decimal::new(801940, 2)),
+            "EU format '8 019,40 PLN' should parse as 8019.40");
+    }
+
+    #[test]
+    fn test_parse_amount_currency_suffix() {
+        // Amount with currency suffix (common in EU exports)
+        // Now works with any format because currency stripping is format-independent
+        let result = parse_amount_with_format("100,50 EUR", NumberFormat::Eu);
+        assert_eq!(result, Some(Decimal::new(10050, 2)),
+            "Amount with EUR suffix should parse correctly");
+    }
+
+    #[test]
+    fn test_parse_amount_us_with_currency_suffix() {
+        // US format with currency suffix
+        let result = parse_amount("100.50 USD");
+        assert_eq!(result, Some(Decimal::new(10050, 2)),
+            "US format with USD suffix should parse correctly");
+    }
+
+    #[test]
+    fn test_number_format_from_str() {
+        assert_eq!(NumberFormat::from_str("us"), NumberFormat::Us);
+        assert_eq!(NumberFormat::from_str("eu"), NumberFormat::Eu);
+        assert_eq!(NumberFormat::from_str("eu_space"), NumberFormat::EuSpace);
+        assert_eq!(NumberFormat::from_str("unknown"), NumberFormat::Us); // default
+    }
 }
