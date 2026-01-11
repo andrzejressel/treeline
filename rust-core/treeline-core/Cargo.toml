@@ -37,6 +37,9 @@ anyhow.workspace = true
 # Regex
 regex.workspace = true
 
+# SQL parsing
+sqlparser.workspace = true
+
 # CSV parsing
 csv.workspace = true
 

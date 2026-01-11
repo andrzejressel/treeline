@@ -9,10 +9,27 @@ use anyhow::{anyhow, Result};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use duckdb::{Connection, params};
 use rust_decimal::Decimal;
+use sqlparser::dialect::DuckDbDialect;
+use sqlparser::parser::Parser;
 use uuid::Uuid;
 
 use crate::domain::{Account, AutoTagRule, BalanceSnapshot, Transaction};
 use crate::services::MigrationService;
+
+/// Validate SQL syntax before execution to catch malformed queries early.
+/// This prevents crashes from malformed SQL reaching the database engine.
+fn validate_sql_syntax(sql: &str) -> Result<()> {
+    let dialect = DuckDbDialect {};
+    Parser::parse_sql(&dialect, sql)
+        .map_err(|e| {
+            // Clean up the error message - remove redundant prefix
+            // Tauri will add "Failed to execute query:" wrapper
+            let msg = e.to_string();
+            let cleaned = msg.trim_start_matches("sql parser error: ");
+            anyhow!("{}", cleaned)
+        })?;
+    Ok(())
+}
 
 /// Maximum number of retries when database file is locked
 const MAX_RETRIES: u32 = 5;
@@ -631,6 +648,9 @@ impl DuckDbRepository {
     /// For SELECT queries, returns columns and rows.
     /// For write queries (INSERT/UPDATE/DELETE), returns affected_rows count.
     pub fn execute_sql(&self, sql: &str) -> Result<QueryResult> {
+        // Validate SQL syntax before execution to prevent crashes on malformed queries
+        validate_sql_syntax(sql)?;
+
         let sql_trimmed = sql.trim();
         let first_word = sql_trimmed.split_whitespace().next().unwrap_or("").to_uppercase();
 
@@ -698,6 +718,9 @@ impl DuckDbRepository {
     ///
     /// Parameters are passed as JSON values and bound to ? placeholders.
     pub fn execute_sql_with_params(&self, sql: &str, params: &[serde_json::Value]) -> Result<QueryResult> {
+        // Validate SQL syntax before execution to prevent crashes on malformed queries
+        validate_sql_syntax(sql)?;
+
         let sql_trimmed = sql.trim();
         let first_word = sql_trimmed.split_whitespace().next().unwrap_or("").to_uppercase();
 
@@ -1386,4 +1409,251 @@ fn parse_duckdb_array(s: &str) -> Vec<String> {
         })
         .filter(|s| !s.is_empty())
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ==================== Valid SQL Tests ====================
+
+    #[test]
+    fn test_valid_select() {
+        assert!(validate_sql_syntax("SELECT * FROM transactions").is_ok());
+    }
+
+    #[test]
+    fn test_valid_select_with_limit() {
+        assert!(validate_sql_syntax("SELECT * FROM transactions LIMIT 10").is_ok());
+    }
+
+    #[test]
+    fn test_valid_select_with_where() {
+        assert!(validate_sql_syntax("SELECT * FROM transactions WHERE amount > 100").is_ok());
+    }
+
+    #[test]
+    fn test_valid_select_with_join() {
+        assert!(validate_sql_syntax(
+            "SELECT t.*, a.name FROM transactions t JOIN accounts a ON t.account_id = a.id"
+        ).is_ok());
+    }
+
+    #[test]
+    fn test_valid_insert() {
+        assert!(validate_sql_syntax(
+            "INSERT INTO transactions (id, amount) VALUES ('abc', 100)"
+        ).is_ok());
+    }
+
+    #[test]
+    fn test_valid_update() {
+        assert!(validate_sql_syntax(
+            "UPDATE transactions SET amount = 200 WHERE id = 'abc'"
+        ).is_ok());
+    }
+
+    #[test]
+    fn test_valid_delete() {
+        assert!(validate_sql_syntax("DELETE FROM transactions WHERE id = 'abc'").is_ok());
+    }
+
+    #[test]
+    fn test_valid_cte() {
+        assert!(validate_sql_syntax(
+            "WITH monthly AS (SELECT * FROM transactions) SELECT * FROM monthly"
+        ).is_ok());
+    }
+
+    #[test]
+    fn test_valid_subquery() {
+        assert!(validate_sql_syntax(
+            "SELECT * FROM transactions WHERE account_id IN (SELECT id FROM accounts)"
+        ).is_ok());
+    }
+
+    #[test]
+    fn test_valid_aggregate() {
+        assert!(validate_sql_syntax(
+            "SELECT account_id, SUM(amount) FROM transactions GROUP BY account_id HAVING SUM(amount) > 1000"
+        ).is_ok());
+    }
+
+    // ==================== Missing Space Errors ====================
+    // These are the original crash cases on Windows
+
+    #[test]
+    fn test_missing_space_before_limit() {
+        let result = validate_sql_syntax("SELECT * FROM transactionsLIMIT 10");
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(!err.contains("sql parser error:")); // Verify cleanup worked
+        assert!(err.contains("Expected")); // Should have meaningful error
+    }
+
+    #[test]
+    fn test_missing_space_before_where() {
+        let result = validate_sql_syntax("SELECT * FROM transactionsWHERE amount > 100");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_missing_space_before_order() {
+        let result = validate_sql_syntax("SELECT * FROM transactionsORDER BY date");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_missing_space_before_group() {
+        let result = validate_sql_syntax("SELECT account_id, COUNT(*) FROM transactionsGROUP BY account_id");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_missing_space_after_select() {
+        // SELECT* is actually valid - * is parsed as "all columns"
+        let result = validate_sql_syntax("SELECT* FROM transactions");
+        assert!(result.is_ok());
+    }
+
+    // ==================== Syntax Errors ====================
+
+    #[test]
+    fn test_unclosed_parenthesis() {
+        let result = validate_sql_syntax("SELECT * FROM transactions WHERE (amount > 100");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_unclosed_string() {
+        let result = validate_sql_syntax("SELECT * FROM transactions WHERE name = 'test");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_missing_from() {
+        let result = validate_sql_syntax("SELECT * transactions");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_missing_table_name() {
+        let result = validate_sql_syntax("SELECT * FROM");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_double_where() {
+        let result = validate_sql_syntax("SELECT * FROM transactions WHERE WHERE amount > 100");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_invalid_operator() {
+        // >> is actually valid (bitshift), use something truly invalid
+        let result = validate_sql_syntax("SELECT * FROM transactions WHERE amount <> > 100");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_typo_in_keyword() {
+        let result = validate_sql_syntax("SELEC * FROM transactions");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_missing_values_keyword() {
+        let result = validate_sql_syntax("INSERT INTO transactions (id) ('abc')");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_missing_set_keyword() {
+        let result = validate_sql_syntax("UPDATE transactions amount = 100");
+        assert!(result.is_err());
+    }
+
+    // ==================== Edge Cases ====================
+
+    #[test]
+    fn test_empty_query() {
+        // Empty string parses as valid (zero statements) in sqlparser
+        // DuckDB will reject this at execution time, which is fine
+        let result = validate_sql_syntax("");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_whitespace_only() {
+        // Whitespace-only parses as valid (zero statements)
+        let result = validate_sql_syntax("   ");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_just_semicolon() {
+        // Semicolon alone is valid (empty statement)
+        let result = validate_sql_syntax(";");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_random_text() {
+        let result = validate_sql_syntax("hello world this is not sql");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_partial_statement() {
+        let result = validate_sql_syntax("SELECT");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_multiple_statements_valid() {
+        // Multiple statements should be valid
+        assert!(validate_sql_syntax("SELECT 1; SELECT 2;").is_ok());
+    }
+
+    #[test]
+    fn test_comment_only() {
+        // Comments alone are valid (zero statements after parsing)
+        let result = validate_sql_syntax("-- this is a comment");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_unbalanced_quotes() {
+        let result = validate_sql_syntax("SELECT * FROM t WHERE x = 'abc");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_missing_closing_paren() {
+        let result = validate_sql_syntax("SELECT * FROM t WHERE (x = 1 AND y = 2");
+        assert!(result.is_err());
+    }
+
+    // ==================== Error Message Format ====================
+
+    #[test]
+    fn test_error_message_format() {
+        let result = validate_sql_syntax("SELECT * FROM transactionsLIMIT 10");
+        let err = result.unwrap_err().to_string();
+
+        // Should NOT contain the redundant "sql parser error:" prefix
+        assert!(!err.contains("sql parser error:"), "Error was: {}", err);
+
+        // Should have meaningful content
+        assert!(err.contains("Expected"), "Error was: {}", err);
+    }
+
+    #[test]
+    fn test_error_contains_location_info() {
+        let result = validate_sql_syntax("SELECT * FROM transactionsLIMIT 10");
+        let err = result.unwrap_err().to_string();
+
+        // Should contain line/column info
+        assert!(err.contains("Line:") || err.contains("line"), "Error was: {}", err);
+    }
 }
