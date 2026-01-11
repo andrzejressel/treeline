@@ -26,7 +26,7 @@ pub use compact::CompactService;
 pub use doctor::DoctorService;
 pub use demo::DemoService;
 pub use encryption::EncryptionService;
-pub use import::{ImportService, ImportOptions, ImportResult};
+pub use import::{ImportService, ImportOptions, ImportResult, NumberFormat};
 pub use balance::BalanceService;
 pub use plugin::{PluginService, PluginInfo, PluginManifest, PluginResult, UpdateInfo};
 pub use migration::{MigrationService, MigrationResult};
