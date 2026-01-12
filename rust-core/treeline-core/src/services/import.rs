@@ -1,10 +1,11 @@
 //! Import service - CSV transaction import
 
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use chrono::NaiveDate;
+use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use regex::Regex;
 use rust_decimal::Decimal;
 use serde::Serialize;
@@ -13,7 +14,7 @@ use uuid::Uuid;
 
 use crate::adapters::duckdb::DuckDbRepository;
 use crate::config::{ColumnMappings, Config, ImportProfile, ImportOptions as ConfigImportOptions};
-use crate::domain::Transaction;
+use crate::domain::{BalanceSnapshot, Transaction};
 use crate::services::TagService;
 
 /// Number format for parsing amounts
@@ -189,8 +190,16 @@ impl ImportService {
         let desc_idx = mappings.description.as_ref()
             .and_then(|d| headers.iter().position(|h| h == d.as_str()));
 
+        // Optional balance column for running balance snapshots
+        let balance_idx = mappings.balance.as_ref()
+            .and_then(|b| headers.iter().position(|h| h == b.as_str()));
+
         let mut transactions = Vec::new();
         let mut skipped = 0;
+        // Track end-of-day balances: for each date, store the last balance seen
+        let mut end_of_day_balances: HashMap<NaiveDate, Decimal> = HashMap::new();
+        // Track per-row balance for preview display
+        let mut preview_balances: Vec<Option<String>> = Vec::new();
 
         for record in &records {
 
@@ -266,6 +275,26 @@ impl ImportService {
             tx.external_ids.insert("fingerprint".to_string(), fingerprint);
 
             transactions.push(tx);
+
+            // Collect balance for end-of-day snapshot (if balance column is mapped)
+            // We store the last balance seen for each date as we iterate through rows
+            // Also capture raw balance for preview display
+            let row_balance = if let Some(bal_idx) = balance_idx {
+                if let Some(balance_str) = record.get(bal_idx) {
+                    if let Some(balance) = parse_amount_with_format(balance_str, options.number_format) {
+                        // Overwrite - we want the last balance for each date in CSV order
+                        end_of_day_balances.insert(date, balance);
+                        Some(balance.to_string())
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+            preview_balances.push(row_balance);
         }
 
         // Track discovered count (valid transactions before deduplication)
@@ -284,11 +313,13 @@ impl ImportService {
                 imported: 0, // Not importing in preview
                 skipped: skipped as i64,
                 fingerprints_checked: 0, // Not checking in preview
+                balance_snapshots_created: 0, // Not creating in preview
                 preview: true,
-                transactions: Some(transactions.iter().map(|t| TransactionPreview {
+                transactions: Some(transactions.iter().enumerate().map(|(i, t)| TransactionPreview {
                     date: t.transaction_date.to_string(),
                     amount: t.amount.to_string(),
                     description: t.description.clone(),
+                    balance: preview_balances.get(i).cloned().flatten(),
                 }).collect()),
             });
         }
@@ -327,12 +358,53 @@ impl ImportService {
             let _ = self.tag_service.apply_auto_tag_rules(&new_tx_ids);
         }
 
+        // Create balance snapshots from collected end-of-day balances
+        let mut balance_snapshots_created = 0i64;
+        if !end_of_day_balances.is_empty() {
+            // Get existing snapshots for deduplication
+            let existing_snapshots = self.repository.get_balance_snapshots(Some(account_id))?;
+
+            for (date, balance) in &end_of_day_balances {
+                // Create end-of-day timestamp (23:59:59.999999)
+                let snapshot_time = NaiveDateTime::new(
+                    *date,
+                    NaiveTime::from_hms_micro_opt(23, 59, 59, 999999).unwrap(),
+                );
+
+                // Check for duplicate: same account + date + balance (within 0.01)
+                let is_duplicate = existing_snapshots.iter().any(|s| {
+                    s.snapshot_time.date() == *date &&
+                    (s.balance - *balance).abs() < Decimal::new(1, 2)
+                });
+
+                if is_duplicate {
+                    continue;
+                }
+
+                let snapshot = BalanceSnapshot {
+                    id: Uuid::new_v4(),
+                    account_id: account_uuid,
+                    balance: *balance,
+                    snapshot_time,
+                    source: Some("csv_import".to_string()),
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                };
+
+                // Best-effort - don't fail import if snapshot insert fails
+                if self.repository.add_balance_snapshot(&snapshot).is_ok() {
+                    balance_snapshots_created += 1;
+                }
+            }
+        }
+
         Ok(ImportResult {
             batch_id,
             discovered,
             imported,
             skipped: skipped + duplicate_count,
             fingerprints_checked,
+            balance_snapshots_created,
             preview: false,
             transactions: None,
         })
@@ -625,6 +697,8 @@ pub struct ImportResult {
     pub skipped: i64,
     /// Number of fingerprints checked for deduplication
     pub fingerprints_checked: i64,
+    /// Number of balance snapshots created from running balance column
+    pub balance_snapshots_created: i64,
     /// Whether this was a preview (no changes applied)
     pub preview: bool,
     /// Transaction previews (only in preview mode)
@@ -637,6 +711,9 @@ pub struct TransactionPreview {
     pub date: String,
     pub amount: String,
     pub description: Option<String>,
+    /// Running balance (from CSV, if mapped)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub balance: Option<String>,
 }
 
 #[cfg(test)]

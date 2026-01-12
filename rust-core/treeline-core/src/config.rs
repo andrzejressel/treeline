@@ -163,6 +163,9 @@ pub struct ColumnMappings {
     pub credit: Option<String>,
     #[serde(default)]
     pub debit: Option<String>,
+    /// Optional running balance column for balance snapshots
+    #[serde(default)]
+    pub balance: Option<String>,
 }
 
 impl Default for ColumnMappings {
@@ -173,6 +176,7 @@ impl Default for ColumnMappings {
             description: Some("Description".to_string()),
             credit: None,
             debit: None,
+            balance: None,
         }
     }
 }
