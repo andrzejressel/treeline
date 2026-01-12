@@ -49,6 +49,9 @@ pub trait Repository: Send + Sync {
     /// Update an existing account
     async fn update_account(&self, account: &Account) -> Result<()>;
 
+    /// Delete an account and all associated data (transactions, balance snapshots)
+    async fn delete_account(&self, id: Uuid) -> Result<()>;
+
     // === Transactions ===
 
     /// Add a new transaction

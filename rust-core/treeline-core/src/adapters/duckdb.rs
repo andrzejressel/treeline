@@ -253,6 +253,39 @@ impl DuckDbRepository {
         Ok(())
     }
 
+    /// Delete an account and all associated data (transactions, balance snapshots)
+    ///
+    /// This performs a cascade delete:
+    /// 1. Delete all transactions for the account
+    /// 2. Delete all balance snapshots for the account
+    /// 3. Delete the account itself
+    pub fn delete_account(&self, account_id: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+
+        // Delete in order to respect foreign key constraints:
+        // transactions and snapshots reference accounts, so delete them first
+
+        // 1. Delete all transactions (including soft-deleted ones)
+        conn.execute(
+            "DELETE FROM sys_transactions WHERE account_id = ?",
+            params![account_id],
+        )?;
+
+        // 2. Delete all balance snapshots
+        conn.execute(
+            "DELETE FROM sys_balance_snapshots WHERE account_id = ?",
+            params![account_id],
+        )?;
+
+        // 3. Delete the account
+        conn.execute(
+            "DELETE FROM sys_accounts WHERE account_id = ?",
+            params![account_id],
+        )?;
+
+        Ok(())
+    }
+
     // === Transaction operations ===
 
     pub fn get_transactions(&self) -> Result<Vec<Transaction>> {
