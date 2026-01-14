@@ -291,8 +291,8 @@ impl DuckDbRepository {
     pub fn get_transactions(&self) -> Result<Vec<Transaction>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT transaction_id, account_id, amount, description, transaction_date,
-                    posted_date, tags, external_ids, deleted_at, parent_transaction_id,
+            "SELECT transaction_id, account_id, amount, description, transaction_date::VARCHAR,
+                    posted_date::VARCHAR, tags, external_ids, deleted_at, parent_transaction_id,
                     created_at, updated_at
              FROM sys_transactions
              WHERE deleted_at IS NULL"
@@ -309,8 +309,8 @@ impl DuckDbRepository {
     pub fn get_transactions_by_account(&self, account_id: &str) -> Result<Vec<Transaction>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT transaction_id, account_id, amount, description, transaction_date,
-                    posted_date, tags, external_ids, deleted_at, parent_transaction_id,
+            "SELECT transaction_id, account_id, amount, description, transaction_date::VARCHAR,
+                    posted_date::VARCHAR, tags, external_ids, deleted_at, parent_transaction_id,
                     created_at, updated_at
              FROM sys_transactions
              WHERE account_id = ? AND deleted_at IS NULL
@@ -523,8 +523,8 @@ impl DuckDbRepository {
     pub fn get_transaction_by_id(&self, id: &str) -> Result<Option<Transaction>> {
         let conn = self.conn.lock().unwrap();
         let mut stmt = conn.prepare(
-            "SELECT transaction_id, account_id, amount, description, transaction_date,
-                    posted_date, tags, external_ids, deleted_at, parent_transaction_id,
+            "SELECT transaction_id, account_id, amount, description, transaction_date::VARCHAR,
+                    posted_date::VARCHAR, tags, external_ids, deleted_at, parent_transaction_id,
                     created_at, updated_at
              FROM sys_transactions WHERE transaction_id = ?"
         )?;
@@ -558,11 +558,12 @@ impl DuckDbRepository {
 
     pub fn get_balance_snapshots(&self, account_id: Option<&str>) -> Result<Vec<BalanceSnapshot>> {
         let conn = self.conn.lock().unwrap();
+        // Cast TIMESTAMP columns to VARCHAR so they can be read as strings
         let sql = if account_id.is_some() {
-            "SELECT snapshot_id, account_id, balance, snapshot_time, source, created_at, updated_at
+            "SELECT snapshot_id, account_id, balance, snapshot_time::VARCHAR, source, created_at::VARCHAR, updated_at::VARCHAR
              FROM sys_balance_snapshots WHERE account_id = ? ORDER BY snapshot_time DESC"
         } else {
-            "SELECT snapshot_id, account_id, balance, snapshot_time, source, created_at, updated_at
+            "SELECT snapshot_id, account_id, balance, snapshot_time::VARCHAR, source, created_at::VARCHAR, updated_at::VARCHAR
              FROM sys_balance_snapshots ORDER BY snapshot_time DESC"
         };
 
@@ -579,6 +580,43 @@ impl DuckDbRepository {
         };
 
         Ok(snapshots)
+    }
+
+    pub fn update_balance_snapshot(&self, snapshot_id: &str, new_balance: Decimal, new_source: &str) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        conn.execute(
+            "UPDATE sys_balance_snapshots SET balance = ?, source = ?, updated_at = ? WHERE snapshot_id = ?",
+            params![
+                new_balance.to_string().parse::<f64>().unwrap_or(0.0),
+                new_source,
+                Utc::now().to_rfc3339(),
+                snapshot_id,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Delete all balance snapshots for an account within a date range
+    pub fn delete_balance_snapshots_in_range(
+        &self,
+        account_id: &str,
+        start_date: NaiveDate,
+        end_date: NaiveDate,
+    ) -> Result<usize> {
+        let conn = self.conn.lock().unwrap();
+        // Delete snapshots where the date part of snapshot_time falls within the range
+        let deleted = conn.execute(
+            "DELETE FROM sys_balance_snapshots
+             WHERE account_id = ?
+             AND CAST(snapshot_time AS DATE) >= ?
+             AND CAST(snapshot_time AS DATE) <= ?",
+            params![
+                account_id,
+                start_date.to_string(),
+                end_date.to_string(),
+            ],
+        )?;
+        Ok(deleted)
     }
 
     fn row_to_balance_snapshot(&self, row: &duckdb::Row) -> BalanceSnapshot {
@@ -1247,7 +1285,7 @@ impl DuckDbRepository {
         // Use Rust-computed date to avoid ICU extension dependency
         let one_year_future = (chrono::Utc::now() + chrono::Duration::days(365)).format("%Y-%m-%d").to_string();
         let mut stmt = conn.prepare(
-            "SELECT transaction_id, transaction_date, description, amount
+            "SELECT transaction_id, transaction_date::VARCHAR, description, amount
              FROM sys_transactions
              WHERE deleted_at IS NULL
                AND (transaction_date > ?
@@ -1395,8 +1433,25 @@ fn parse_date(s: &str) -> NaiveDate {
 }
 
 fn parse_naive_datetime(s: &str) -> NaiveDateTime {
-    NaiveDateTime::parse_from_str(s, "%Y-%m-%d %H:%M:%S")
-        .or_else(|_| NaiveDateTime::parse_from_str(s, "%Y-%m-%dT%H:%M:%S"))
+    // Try parsing with timezone first (e.g., "2026-01-14T23:59:59+00:00")
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+        return dt.naive_utc();
+    }
+    // Strip timezone suffix if present (e.g., "+00:00") and parse as naive
+    let s_stripped = if s.len() > 6 && (s.contains('+') || s.ends_with('Z')) {
+        s.trim_end_matches('Z')
+            .rsplit_once('+')
+            .map(|(base, _)| base)
+            .or_else(|| s.rsplit_once('-').filter(|(base, tz)| base.len() > 10 && tz.contains(':')).map(|(base, _)| base))
+            .unwrap_or(s)
+    } else {
+        s
+    };
+    // Try various timestamp formats that DuckDB might produce
+    NaiveDateTime::parse_from_str(s_stripped, "%Y-%m-%dT%H:%M:%S")
+        .or_else(|_| NaiveDateTime::parse_from_str(s_stripped, "%Y-%m-%d %H:%M:%S%.f"))
+        .or_else(|_| NaiveDateTime::parse_from_str(s_stripped, "%Y-%m-%d %H:%M:%S"))
+        .or_else(|_| NaiveDateTime::parse_from_str(s_stripped, "%Y-%m-%dT%H:%M:%S%.f"))
         .unwrap_or_else(|_| Utc::now().naive_utc())
 }
 
