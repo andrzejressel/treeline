@@ -2,6 +2,8 @@
 //!
 //! Handles communication with the Lunchflow API for account and transaction sync.
 //! Lunchflow is a multi-provider bank aggregator supporting 20,000+ banks globally.
+//!
+//! API Documentation: https://docs.lunchflow.app/api-reference
 
 use std::collections::HashMap;
 use std::time::Duration;
@@ -19,40 +21,122 @@ use crate::domain::result::{Error as DomainError, Result as DomainResult};
 use crate::ports::{DataAggregationProvider, FetchAccountsResult, FetchTransactionsResult, IntegrationProvider};
 
 // =============================================================================
-// API Response Models (based on Actual Budget's Lunchflow integration)
+// API Response Models (matching Lunchflow API spec)
 // =============================================================================
+
+/// Wrapper for accounts list response
+#[derive(Debug, Clone, Deserialize)]
+struct AccountsResponse {
+    accounts: Vec<LunchflowAccount>,
+    #[allow(dead_code)]
+    total: i64,
+}
 
 /// Lunchflow account from API
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LunchflowAccount {
+    /// Account ID (API returns number, we accept both)
+    #[serde(deserialize_with = "deserialize_id")]
     pub id: String,
     pub name: String,
+    pub institution_name: String,
     #[serde(default)]
-    pub institution_name: Option<String>,
+    pub institution_logo: Option<String>,
     #[serde(default)]
-    pub balance: Option<String>,
+    pub provider: Option<String>,
     #[serde(default)]
     pub currency: Option<String>,
     #[serde(default)]
-    pub account_type: Option<String>,
+    pub status: Option<String>,
+}
+
+/// Wrapper for balance response
+#[derive(Debug, Clone, Deserialize)]
+struct BalanceResponse {
+    balance: BalanceData,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct BalanceData {
+    amount: f64,
+    currency: String,
+}
+
+/// Wrapper for transactions list response
+#[derive(Debug, Clone, Deserialize)]
+struct TransactionsResponse {
+    transactions: Vec<LunchflowTransaction>,
+    #[allow(dead_code)]
+    total: i64,
 }
 
 /// Lunchflow transaction from API
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct LunchflowTransaction {
     pub id: String,
+    /// Account ID this transaction belongs to
+    #[serde(default, rename = "accountId", deserialize_with = "deserialize_optional_id")]
+    pub account_id: Option<String>,
+    /// Amount as number from API
+    #[serde(deserialize_with = "deserialize_amount")]
+    pub amount: Decimal,
+    pub currency: String,
     pub date: String, // ISO date string YYYY-MM-DD
-    pub amount: String,
-    #[serde(default)]
-    pub currency: Option<String>,
     #[serde(default)]
     pub merchant: Option<String>,
     #[serde(default)]
     pub description: Option<String>,
-    #[serde(default)]
-    pub pending: bool,
-    #[serde(default)]
-    pub category: Option<String>,
+    /// API uses isPending (camelCase)
+    #[serde(default, rename = "isPending")]
+    pub is_pending: bool,
+}
+
+/// Deserialize ID that can be number or string
+fn deserialize_id<'de, D>(deserializer: D) -> std::result::Result<String, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let value: JsonValue = Deserialize::deserialize(deserializer)?;
+    match value {
+        JsonValue::Number(n) => Ok(n.to_string()),
+        JsonValue::String(s) => Ok(s),
+        _ => Err(D::Error::custom("expected number or string for id")),
+    }
+}
+
+/// Deserialize optional ID that can be number or string
+fn deserialize_optional_id<'de, D>(deserializer: D) -> std::result::Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let value: Option<JsonValue> = Option::deserialize(deserializer)?;
+    match value {
+        Some(JsonValue::Number(n)) => Ok(Some(n.to_string())),
+        Some(JsonValue::String(s)) => Ok(Some(s)),
+        Some(JsonValue::Null) | None => Ok(None),
+        _ => Err(D::Error::custom("expected number or string for id")),
+    }
+}
+
+/// Deserialize amount that can be number or string
+fn deserialize_amount<'de, D>(deserializer: D) -> std::result::Result<Decimal, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    use serde::de::Error;
+    let value: JsonValue = Deserialize::deserialize(deserializer)?;
+    match value {
+        JsonValue::Number(n) => {
+            let s = n.to_string();
+            s.parse::<Decimal>().map_err(|e| D::Error::custom(format!("invalid decimal: {}", e)))
+        }
+        JsonValue::String(s) => {
+            s.parse::<Decimal>().map_err(|e| D::Error::custom(format!("invalid decimal: {}", e)))
+        }
+        _ => Err(D::Error::custom("expected number or string for amount")),
+    }
 }
 
 /// Result of syncing accounts from Lunchflow
@@ -75,6 +159,18 @@ pub struct SyncedTransactions {
 // Lunchflow HTTP Client
 // =============================================================================
 
+/// Default production API URL
+const LUNCHFLOW_PRODUCTION_URL: &str = "https://lunchflow.com/api/v1";
+
+/// Environment variable to override the Lunchflow API base URL.
+/// Set this to use a staging/sandbox environment for testing.
+pub const LUNCHFLOW_BASE_URL_ENV: &str = "LUNCHFLOW_BASE_URL";
+
+/// Get the Lunchflow base URL, checking environment variable first
+pub fn get_base_url() -> String {
+    std::env::var(LUNCHFLOW_BASE_URL_ENV).unwrap_or_else(|_| LUNCHFLOW_PRODUCTION_URL.to_string())
+}
+
 /// Lunchflow API client
 #[derive(Debug)]
 pub struct LunchflowClient {
@@ -84,12 +180,17 @@ pub struct LunchflowClient {
 }
 
 impl LunchflowClient {
-    /// Create a new Lunchflow client with the given API key
+    /// Create a new Lunchflow client with the given API key.
+    ///
+    /// Uses the `LUNCHFLOW_BASE_URL` environment variable if set,
+    /// otherwise defaults to the production API.
     pub fn new(api_key: &str) -> Result<Self> {
-        Self::new_with_base_url(api_key, "https://api.lunchflow.com/v1")
+        Self::new_with_base_url(api_key, &get_base_url())
     }
 
-    /// Create a new Lunchflow client with a custom base URL (for testing)
+    /// Create a new Lunchflow client with a custom base URL.
+    ///
+    /// Prefer using `new()` with the `LUNCHFLOW_BASE_URL` env var for testing.
     pub fn new_with_base_url(api_key: &str, base_url: &str) -> Result<Self> {
         if api_key.is_empty() {
             anyhow::bail!("Lunchflow API key cannot be empty");
@@ -103,7 +204,7 @@ impl LunchflowClient {
         Ok(Self {
             client,
             api_key: api_key.to_string(),
-            base_url: base_url.to_string(),
+            base_url: base_url.trim_end_matches('/').to_string(),
         })
     }
 
@@ -114,26 +215,38 @@ impl LunchflowClient {
         let response = self
             .client
             .get(&url)
-            .bearer_auth(&self.api_key)
+            .header("x-api-key", &self.api_key)
             .send()
             .map_err(|e| self.map_request_error(e))?;
 
         self.check_response_status(&response)?;
 
-        let accounts: Vec<LunchflowAccount> = response
+        // API returns { accounts: [...], total: N }
+        let api_response: AccountsResponse = response
             .json()
             .context("Failed to parse Lunchflow accounts response")?;
 
         let mut domain_accounts = Vec::new();
         let mut balance_snapshots = Vec::new();
-        let warnings = Vec::new();
+        let mut warnings = Vec::new();
 
-        for lf_account in accounts {
+        for lf_account in api_response.accounts {
+            // Skip disconnected/error accounts
+            if let Some(status) = &lf_account.status {
+                if status != "ACTIVE" {
+                    warnings.push(format!(
+                        "Account '{}' has status '{}' - skipping",
+                        lf_account.name, status
+                    ));
+                    continue;
+                }
+            }
+
             let account = self.map_account(&lf_account);
 
-            // Create balance snapshot if balance is available
-            if let Some(balance_str) = &lf_account.balance {
-                if let Ok(balance) = balance_str.parse::<Decimal>() {
+            // Fetch balance separately for each account
+            match self.fetch_account_balance(&lf_account.id) {
+                Ok((balance, currency)) => {
                     balance_snapshots.push(BalanceSnapshot {
                         id: Uuid::new_v4(),
                         account_id: account.id,
@@ -143,10 +256,22 @@ impl LunchflowClient {
                         created_at: Utc::now(),
                         updated_at: Utc::now(),
                     });
+                    // Update account with fetched balance
+                    let mut account = account;
+                    account.balance = Some(balance);
+                    if account.currency == "USD" && !currency.is_empty() {
+                        account.currency = currency;
+                    }
+                    domain_accounts.push(account);
+                }
+                Err(e) => {
+                    warnings.push(format!(
+                        "Failed to fetch balance for account '{}': {}",
+                        lf_account.name, e
+                    ));
+                    domain_accounts.push(account);
                 }
             }
-
-            domain_accounts.push(account);
         }
 
         Ok(SyncedAccounts {
@@ -156,11 +281,37 @@ impl LunchflowClient {
         })
     }
 
-    /// Fetch transactions for specific accounts within a date range
+    /// Fetch balance for a single account
+    fn fetch_account_balance(&self, account_id: &str) -> Result<(Decimal, String)> {
+        let url = format!("{}/accounts/{}/balance", self.base_url, account_id);
+
+        let response = self
+            .client
+            .get(&url)
+            .header("x-api-key", &self.api_key)
+            .send()
+            .map_err(|e| self.map_request_error(e))?;
+
+        self.check_response_status(&response)?;
+
+        let balance_response: BalanceResponse = response
+            .json()
+            .context("Failed to parse balance response")?;
+
+        let balance = Decimal::try_from(balance_response.balance.amount)
+            .unwrap_or_else(|_| Decimal::new((balance_response.balance.amount * 100.0) as i64, 2));
+
+        Ok((balance, balance_response.balance.currency))
+    }
+
+    /// Fetch transactions for specific accounts
+    ///
+    /// Note: The Lunchflow API does not support date filtering - it returns all transactions.
+    /// The start_date and end_date parameters are kept for API compatibility but are ignored.
     pub fn get_transactions(
         &self,
-        start_date: NaiveDate,
-        end_date: NaiveDate,
+        _start_date: NaiveDate,
+        _end_date: NaiveDate,
         account_ids: Option<&[String]>,
     ) -> Result<SyncedTransactions> {
         let mut all_transactions = Vec::new();
@@ -181,7 +332,7 @@ impl LunchflowClient {
         };
 
         for account_id in ids_to_fetch {
-            match self.fetch_account_transactions(&account_id, start_date, end_date) {
+            match self.fetch_account_transactions(&account_id, true) {
                 Ok(txs) => {
                     for lf_tx in txs {
                         let tx = self.map_transaction(&lf_tx);
@@ -189,7 +340,10 @@ impl LunchflowClient {
                     }
                 }
                 Err(e) => {
-                    warnings.push(format!("Failed to fetch transactions for account {}: {}", account_id, e));
+                    warnings.push(format!(
+                        "Failed to fetch transactions for account {}: {}",
+                        account_id, e
+                    ));
                 }
             }
         }
@@ -204,31 +358,28 @@ impl LunchflowClient {
     fn fetch_account_transactions(
         &self,
         account_id: &str,
-        start_date: NaiveDate,
-        end_date: NaiveDate,
+        include_pending: bool,
     ) -> Result<Vec<LunchflowTransaction>> {
         let url = format!(
-            "{}/accounts/{}/transactions?start_date={}&end_date={}",
-            self.base_url,
-            account_id,
-            start_date.format("%Y-%m-%d"),
-            end_date.format("%Y-%m-%d"),
+            "{}/accounts/{}/transactions?include_pending={}",
+            self.base_url, account_id, include_pending
         );
 
         let response = self
             .client
             .get(&url)
-            .bearer_auth(&self.api_key)
+            .header("x-api-key", &self.api_key)
             .send()
             .map_err(|e| self.map_request_error(e))?;
 
         self.check_response_status(&response)?;
 
-        let transactions: Vec<LunchflowTransaction> = response
+        // API returns { transactions: [...], total: N }
+        let api_response: TransactionsResponse = response
             .json()
             .context("Failed to parse Lunchflow transactions response")?;
 
-        Ok(transactions)
+        Ok(api_response.transactions)
     }
 
     /// Map Lunchflow account to domain Account
@@ -236,20 +387,15 @@ impl LunchflowClient {
         let mut external_ids = HashMap::new();
         external_ids.insert("lunchflow".to_string(), lf_account.id.clone());
 
-        let balance = lf_account
-            .balance
-            .as_ref()
-            .and_then(|b| b.parse::<Decimal>().ok());
-
         Account {
             id: Uuid::new_v4(),
             name: lf_account.name.clone(),
             nickname: None,
             currency: lf_account.currency.clone().unwrap_or_else(|| "USD".to_string()),
-            account_type: lf_account.account_type.clone(),
+            account_type: None, // Lunchflow doesn't provide account type
             external_ids,
-            balance,
-            institution_name: lf_account.institution_name.clone(),
+            balance: None, // Will be set after fetching balance
+            institution_name: Some(lf_account.institution_name.clone()),
             institution_url: None,
             institution_domain: None,
             created_at: Utc::now(),
@@ -262,33 +408,26 @@ impl LunchflowClient {
         let mut external_ids = HashMap::new();
         external_ids.insert("lunchflow".to_string(), lf_tx.id.clone());
 
-        let amount = lf_tx.amount.parse::<Decimal>().unwrap_or_default();
-
         let posted_date = NaiveDate::parse_from_str(&lf_tx.date, "%Y-%m-%d")
             .unwrap_or_else(|_| Utc::now().naive_utc().date());
 
-        // Use merchant if available, otherwise description
-        let description = lf_tx
-            .merchant
-            .clone()
-            .or_else(|| lf_tx.description.clone());
-
-        // Use category as tag if present
-        let tags = lf_tx
-            .category
-            .as_ref()
-            .map(|c| vec![c.clone()])
-            .unwrap_or_default();
+        // Combine merchant and description to preserve all info
+        let description = match (&lf_tx.merchant, &lf_tx.description) {
+            (Some(m), Some(d)) if m != d => Some(format!("{} - {}", m, d)),
+            (Some(m), _) => Some(m.clone()),
+            (None, Some(d)) => Some(d.clone()),
+            (None, None) => None,
+        };
 
         Transaction {
             id: Uuid::new_v4(),
             account_id: Uuid::nil(), // Will be set by sync service after mapping
-            amount,
+            amount: lf_tx.amount,
             description,
             transaction_date: posted_date,
             posted_date,
             external_ids,
-            tags,
+            tags: vec![],
             created_at: Utc::now(),
             updated_at: Utc::now(),
             deleted_at: None,
@@ -511,12 +650,13 @@ mod tests {
     #[test]
     fn test_account_mapping() {
         let lf_account = LunchflowAccount {
-            id: "acc_123".to_string(),
+            id: "123".to_string(),
             name: "Test Account".to_string(),
-            institution_name: Some("Test Bank".to_string()),
-            balance: Some("1234.56".to_string()),
+            institution_name: "Test Bank".to_string(),
+            institution_logo: None,
+            provider: Some("gocardless".to_string()),
             currency: Some("EUR".to_string()),
-            account_type: Some("checking".to_string()),
+            status: Some("ACTIVE".to_string()),
         };
 
         let client = LunchflowClient::new_with_base_url("test_key", "http://localhost").unwrap();
@@ -527,11 +667,7 @@ mod tests {
         assert_eq!(account.institution_name, Some("Test Bank".to_string()));
         assert_eq!(
             account.external_ids.get("lunchflow"),
-            Some(&"acc_123".to_string())
-        );
-        assert_eq!(
-            account.balance,
-            Some(Decimal::new(123456, 2))
+            Some(&"123".to_string())
         );
     }
 
@@ -539,21 +675,21 @@ mod tests {
     fn test_transaction_mapping() {
         let lf_tx = LunchflowTransaction {
             id: "tx_456".to_string(),
+            account_id: Some("123".to_string()),
             date: "2025-01-15".to_string(),
-            amount: "-42.50".to_string(),
-            currency: Some("EUR".to_string()),
+            amount: Decimal::new(-4250, 2),
+            currency: "EUR".to_string(),
             merchant: Some("Coffee Shop".to_string()),
             description: Some("Card payment".to_string()),
-            pending: false,
-            category: Some("Food & Drink".to_string()),
+            is_pending: false,
         };
 
         let client = LunchflowClient::new_with_base_url("test_key", "http://localhost").unwrap();
         let tx = client.map_transaction(&lf_tx);
 
-        assert_eq!(tx.description, Some("Coffee Shop".to_string())); // merchant preferred
+        // Both merchant and description combined
+        assert_eq!(tx.description, Some("Coffee Shop - Card payment".to_string()));
         assert_eq!(tx.amount, Decimal::new(-4250, 2));
-        assert_eq!(tx.tags, vec!["Food & Drink".to_string()]);
         assert_eq!(
             tx.external_ids.get("lunchflow"),
             Some(&"tx_456".to_string())
@@ -564,20 +700,19 @@ mod tests {
     fn test_transaction_mapping_no_merchant() {
         let lf_tx = LunchflowTransaction {
             id: "tx_789".to_string(),
+            account_id: None,
             date: "2025-01-15".to_string(),
-            amount: "100.00".to_string(),
-            currency: None,
+            amount: Decimal::new(10000, 2),
+            currency: "USD".to_string(),
             merchant: None,
             description: Some("Direct deposit".to_string()),
-            pending: false,
-            category: None,
+            is_pending: false,
         };
 
         let client = LunchflowClient::new_with_base_url("test_key", "http://localhost").unwrap();
         let tx = client.map_transaction(&lf_tx);
 
         assert_eq!(tx.description, Some("Direct deposit".to_string())); // falls back to description
-        assert!(tx.tags.is_empty());
     }
 
     #[test]
@@ -585,5 +720,19 @@ mod tests {
         let provider = LunchflowProvider::new();
         let result = provider.setup(&serde_json::json!({}));
         assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_default_base_url() {
+        // When LUNCHFLOW_BASE_URL env var is not set, should use production
+        std::env::remove_var("LUNCHFLOW_BASE_URL");
+        let url = get_base_url();
+        assert_eq!(url, "https://lunchflow.com/api/v1");
+    }
+
+    #[test]
+    fn test_base_url_trailing_slash_trimmed() {
+        let client = LunchflowClient::new_with_base_url("test_key", "http://localhost/api/").unwrap();
+        assert_eq!(client.base_url, "http://localhost/api");
     }
 }

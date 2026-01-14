@@ -2,6 +2,11 @@
 //!
 //! This module provides a mock HTTP server that simulates the Lunchflow API,
 //! allowing for comprehensive testing without a real Lunchflow account.
+//!
+//! The mock server implements the same response structure as the real Lunchflow API:
+//! - GET /accounts returns { accounts: [...], total: N }
+//! - GET /accounts/{id}/balance returns { balance: { amount: N, currency: "..." } }
+//! - GET /accounts/{id}/transactions returns { transactions: [...], total: N }
 
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -10,8 +15,9 @@ use std::sync::Arc;
 use std::thread;
 
 use chrono::{Duration, Utc};
+use serde::Serialize;
 
-use super::lunchflow::{LunchflowAccount, LunchflowTransaction};
+use super::lunchflow::LunchflowAccount;
 
 /// Mock Lunchflow server for testing
 pub struct MockLunchflowServer {
@@ -45,6 +51,55 @@ impl Default for MockConfig {
             delay_ms: 0,
         }
     }
+}
+
+// Response structures matching the real API
+
+#[derive(Serialize)]
+struct AccountsResponse {
+    accounts: Vec<MockAccount>,
+    total: usize,
+}
+
+#[derive(Serialize)]
+struct MockAccount {
+    id: i64,
+    name: String,
+    institution_name: String,
+    institution_logo: Option<String>,
+    provider: String,
+    currency: String,
+    status: String,
+}
+
+#[derive(Serialize)]
+struct BalanceResponse {
+    balance: BalanceData,
+}
+
+#[derive(Serialize)]
+struct BalanceData {
+    amount: f64,
+    currency: String,
+}
+
+#[derive(Serialize)]
+struct TransactionsResponse {
+    transactions: Vec<MockTransaction>,
+    total: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct MockTransaction {
+    id: String,
+    account_id: i64,
+    amount: f64,
+    currency: String,
+    date: String,
+    merchant: Option<String>,
+    description: String,
+    is_pending: bool,
 }
 
 impl MockLunchflowServer {
@@ -129,129 +184,223 @@ fn handle_connection(mut stream: TcpStream, config: &MockConfig) {
         let parts: Vec<&str> = first_line.split_whitespace().collect();
 
         if parts.len() < 2 {
-            send_response(&mut stream, 400, "Bad Request", "Invalid request");
+            send_response(&mut stream, 400, "Bad Request", r#"{"error": "Invalid request"}"#);
             return;
         }
 
         let method = parts[0];
         let path = parts[1];
 
-        // Check authorization header (case-insensitive)
+        // Check x-api-key header (case-insensitive)
         let request_lower = request.to_lowercase();
-        let has_valid_auth = request_lower.contains("authorization: bearer test_") ||
-                            request_lower.contains("authorization: bearer lf_live_") ||
-                            request_lower.contains("authorization: bearer mock_") ||
-                            request_lower.contains("authorization: bearer valid_");
+        let has_valid_auth = request_lower.contains("x-api-key: test_")
+            || request_lower.contains("x-api-key: lf_live_")
+            || request_lower.contains("x-api-key: lf_test_")
+            || request_lower.contains("x-api-key: mock_")
+            || request_lower.contains("x-api-key: valid_");
 
         // Handle different scenarios
         if config.fail_auth {
-            send_response(&mut stream, 401, "Unauthorized",
-                r#"{"error": "Invalid API key"}"#);
+            send_response(
+                &mut stream,
+                401,
+                "Unauthorized",
+                r#"{"error": "Invalid API key"}"#,
+            );
             return;
         }
 
         if !has_valid_auth {
-            send_response(&mut stream, 401, "Unauthorized",
-                r#"{"error": "Invalid API key"}"#);
+            send_response(
+                &mut stream,
+                401,
+                "Unauthorized",
+                r#"{"error": "Invalid API key"}"#,
+            );
             return;
         }
 
         if config.rate_limit {
-            send_response(&mut stream, 429, "Too Many Requests",
-                r#"{"error": "Rate limit exceeded"}"#);
+            send_response(
+                &mut stream,
+                429,
+                "Too Many Requests",
+                r#"{"error": "Rate limit exceeded"}"#,
+            );
             return;
         }
 
-        // Route requests
-        match (method, path) {
-            ("GET", "/accounts") | ("GET", "/v1/accounts") => {
-                let accounts = generate_mock_accounts(config.num_accounts);
-                let json = serde_json::to_string(&accounts).unwrap();
-                send_response(&mut stream, 200, "OK", &json);
-            }
-            ("GET", p) if p.contains("/transactions") => {
-                // Extract account ID from path like /accounts/acc_1/transactions
-                let txs = generate_mock_transactions(config.num_transactions_per_account);
-                let json = serde_json::to_string(&txs).unwrap();
-                send_response(&mut stream, 200, "OK", &json);
+        // Route requests - handle path with or without query string
+        let path_without_query = path.split('?').next().unwrap_or(path);
+
+        match method {
+            "GET" => {
+                if path_without_query == "/accounts" {
+                    // List accounts: GET /accounts
+                    let accounts = generate_mock_accounts(config.num_accounts);
+                    let response = AccountsResponse {
+                        total: accounts.len(),
+                        accounts,
+                    };
+                    let json = serde_json::to_string(&response).unwrap();
+                    send_response(&mut stream, 200, "OK", &json);
+                } else if path_without_query.starts_with("/accounts/")
+                    && path_without_query.ends_with("/balance")
+                {
+                    // Get balance: GET /accounts/{id}/balance
+                    let account_id = extract_account_id(path_without_query);
+                    let balance = generate_mock_balance(account_id);
+                    let json = serde_json::to_string(&balance).unwrap();
+                    send_response(&mut stream, 200, "OK", &json);
+                } else if path_without_query.starts_with("/accounts/")
+                    && path_without_query.contains("/transactions")
+                {
+                    // Get transactions: GET /accounts/{id}/transactions
+                    let account_id = extract_account_id(path_without_query);
+                    let txs = generate_mock_transactions(
+                        account_id,
+                        config.num_transactions_per_account,
+                    );
+                    let response = TransactionsResponse {
+                        total: txs.len(),
+                        transactions: txs,
+                    };
+                    let json = serde_json::to_string(&response).unwrap();
+                    send_response(&mut stream, 200, "OK", &json);
+                } else {
+                    send_response(
+                        &mut stream,
+                        404,
+                        "Not Found",
+                        r#"{"error": "Endpoint not found"}"#,
+                    );
+                }
             }
             _ => {
-                send_response(&mut stream, 404, "Not Found",
-                    r#"{"error": "Endpoint not found"}"#);
+                send_response(
+                    &mut stream,
+                    405,
+                    "Method Not Allowed",
+                    r#"{"error": "Method not allowed"}"#,
+                );
             }
         }
+    }
+}
+
+fn extract_account_id(path: &str) -> i64 {
+    // Extract account ID from paths like /accounts/123/balance or /accounts/123/transactions
+    let parts: Vec<&str> = path.split('/').collect();
+    if parts.len() >= 3 {
+        parts[2].parse().unwrap_or(1)
+    } else {
+        1
     }
 }
 
 fn send_response(stream: &mut TcpStream, status: u16, status_text: &str, body: &str) {
     let response = format!(
         "HTTP/1.1 {} {}\r\nContent-Type: application/json\r\nContent-Length: {}\r\n\r\n{}",
-        status, status_text, body.len(), body
+        status,
+        status_text,
+        body.len(),
+        body
     );
     let _ = stream.write_all(response.as_bytes());
     let _ = stream.flush();
 }
 
-fn generate_mock_accounts(count: usize) -> Vec<LunchflowAccount> {
+fn generate_mock_accounts(count: usize) -> Vec<MockAccount> {
     let institutions = vec![
-        ("Barclays", "GBP"),
-        ("HSBC", "GBP"),
-        ("Revolut", "EUR"),
-        ("N26", "EUR"),
-        ("Chase", "USD"),
-        ("Bank of America", "USD"),
+        ("Barclays", "GBP", "gocardless"),
+        ("HSBC", "GBP", "gocardless"),
+        ("Revolut", "EUR", "gocardless"),
+        ("N26", "EUR", "gocardless"),
+        ("Chase", "USD", "quiltt"),
+        ("Bank of America", "USD", "quiltt"),
     ];
 
-    let account_types = vec!["checking", "savings", "credit"];
+    (0..count)
+        .map(|i| {
+            let (inst, currency, provider) = institutions[i % institutions.len()];
 
-    (0..count).map(|i| {
-        let (inst, currency) = &institutions[i % institutions.len()];
-        let acc_type = account_types[i % account_types.len()];
-        let balance = (1000.0 + (i as f64 * 500.0)) * if acc_type == "credit" { -1.0 } else { 1.0 };
-
-        LunchflowAccount {
-            id: format!("lf_acc_{}", i + 1),
-            name: format!("{} {}", inst, acc_type.to_uppercase()),
-            institution_name: Some(inst.to_string()),
-            balance: Some(format!("{:.2}", balance)),
-            currency: Some(currency.to_string()),
-            account_type: Some(acc_type.to_string()),
-        }
-    }).collect()
+            MockAccount {
+                id: (i + 1) as i64,
+                name: format!("{} Checking", inst),
+                institution_name: inst.to_string(),
+                institution_logo: Some(format!("https://logos.lunchflow.com/{}.png", inst.to_lowercase())),
+                provider: provider.to_string(),
+                currency: currency.to_string(),
+                status: "ACTIVE".to_string(),
+            }
+        })
+        .collect()
 }
 
-fn generate_mock_transactions(count: usize) -> Vec<LunchflowTransaction> {
+fn generate_mock_balance(account_id: i64) -> BalanceResponse {
+    // Generate deterministic balance based on account ID
+    let amount = 1000.0 + (account_id as f64 * 500.0);
+    let currencies = vec!["GBP", "EUR", "USD"];
+    let currency = currencies[(account_id as usize) % currencies.len()];
+
+    BalanceResponse {
+        balance: BalanceData {
+            amount,
+            currency: currency.to_string(),
+        },
+    }
+}
+
+fn generate_mock_transactions(account_id: i64, count: usize) -> Vec<MockTransaction> {
     let merchants = vec![
-        ("Tesco", "Groceries", -45.23),
-        ("Amazon", "Shopping", -29.99),
-        ("Netflix", "Entertainment", -9.99),
-        ("Shell", "Transport", -52.00),
-        ("Costa Coffee", "Food & Drink", -4.50),
-        ("Spotify", "Entertainment", -9.99),
-        ("Uber", "Transport", -12.50),
-        ("Apple", "Shopping", -199.00),
-        ("SALARY", "Income", 3500.00),
-        ("Interest", "Income", 2.50),
+        ("Tesco", -45.23),
+        ("Amazon", -29.99),
+        ("Netflix", -9.99),
+        ("Shell", -52.00),
+        ("Costa Coffee", -4.50),
+        ("Spotify", -9.99),
+        ("Uber", -12.50),
+        ("Apple", -199.00),
+        ("SALARY", 3500.00),
+        ("Interest", 2.50),
     ];
 
     let today = Utc::now().naive_utc().date();
+    let currencies = vec!["GBP", "EUR", "USD"];
+    let currency = currencies[(account_id as usize) % currencies.len()];
 
-    (0..count).map(|i| {
-        let (merchant, category, amount) = &merchants[i % merchants.len()];
-        let days_ago = (i % 90) as i64;
-        let date = today - Duration::days(days_ago);
+    (0..count)
+        .map(|i| {
+            let (merchant, amount) = merchants[i % merchants.len()];
+            let days_ago = (i % 90) as i64;
+            let date = today - Duration::days(days_ago);
 
-        LunchflowTransaction {
-            id: format!("lf_tx_{}", i + 1),
-            date: date.format("%Y-%m-%d").to_string(),
-            amount: format!("{:.2}", amount),
-            currency: Some("GBP".to_string()),
-            merchant: Some(merchant.to_string()),
-            description: Some(format!("{} - Transaction #{}", merchant, i + 1)),
-            pending: i < 3, // First 3 transactions are pending
-            category: Some(category.to_string()),
-        }
-    }).collect()
+            MockTransaction {
+                id: format!("tx_{}_{}", account_id, i + 1),
+                account_id,
+                amount,
+                currency: currency.to_string(),
+                date: date.format("%Y-%m-%d").to_string(),
+                merchant: Some(merchant.to_string()),
+                description: format!("{} - Transaction #{}", merchant, i + 1),
+                is_pending: i < 3, // First 3 transactions are pending
+            }
+        })
+        .collect()
+}
+
+// Keep LunchflowAccount available for external use but we use MockAccount internally
+#[allow(dead_code)]
+fn _lunchflow_account_from_mock(mock: &MockAccount) -> LunchflowAccount {
+    LunchflowAccount {
+        id: mock.id.to_string(),
+        name: mock.name.clone(),
+        institution_name: mock.institution_name.clone(),
+        institution_logo: mock.institution_logo.clone(),
+        provider: Some(mock.provider.clone()),
+        currency: Some(mock.currency.clone()),
+        status: Some(mock.status.clone()),
+    }
 }
 
 #[cfg(test)]
@@ -271,7 +420,8 @@ mod tests {
         let server = MockLunchflowServer::start(MockConfig {
             num_accounts: 5,
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         let client = LunchflowClient::new_with_base_url("test_key", &server.base_url()).unwrap();
         let result = client.get_accounts().unwrap();
@@ -286,12 +436,14 @@ mod tests {
             num_accounts: 1,
             num_transactions_per_account: 20,
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         let client = LunchflowClient::new_with_base_url("test_key", &server.base_url()).unwrap();
         let accounts = client.get_accounts().unwrap();
 
-        let account_ids: Vec<String> = accounts.accounts
+        let account_ids: Vec<String> = accounts
+            .accounts
             .iter()
             .filter_map(|a| a.external_ids.get("lunchflow").cloned())
             .collect();
@@ -299,7 +451,9 @@ mod tests {
         let today = Utc::now().naive_utc().date();
         let start = today - Duration::days(90);
 
-        let result = client.get_transactions(start, today, Some(&account_ids)).unwrap();
+        let result = client
+            .get_transactions(start, today, Some(&account_ids))
+            .unwrap();
 
         assert_eq!(result.transactions.len(), 20);
     }
@@ -309,7 +463,8 @@ mod tests {
         let server = MockLunchflowServer::start(MockConfig {
             fail_auth: true,
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         let client = LunchflowClient::new_with_base_url("test_key", &server.base_url()).unwrap();
         let result = client.get_accounts();
@@ -324,7 +479,8 @@ mod tests {
             rate_limit: true,
             fail_auth: false,
             ..Default::default()
-        }).unwrap();
+        })
+        .unwrap();
 
         // Use a valid auth token prefix
         let client = LunchflowClient::new_with_base_url("valid_key", &server.base_url()).unwrap();
@@ -332,7 +488,11 @@ mod tests {
 
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string().to_lowercase();
-        assert!(err_msg.contains("rate limit"), "Expected 'rate limit' in error, got: {}", err_msg);
+        assert!(
+            err_msg.contains("rate limit"),
+            "Expected 'rate limit' in error, got: {}",
+            err_msg
+        );
     }
 
     #[test]
