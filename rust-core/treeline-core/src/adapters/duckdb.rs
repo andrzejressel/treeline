@@ -558,12 +558,12 @@ impl DuckDbRepository {
 
     pub fn get_balance_snapshots(&self, account_id: Option<&str>) -> Result<Vec<BalanceSnapshot>> {
         let conn = self.conn.lock().unwrap();
-        // Cast TIMESTAMP columns to VARCHAR so they can be read as strings
+        // Cast TIMESTAMP and balance columns to VARCHAR so they can be read as strings with full precision
         let sql = if account_id.is_some() {
-            "SELECT snapshot_id, account_id, balance, snapshot_time::VARCHAR, source, created_at::VARCHAR, updated_at::VARCHAR
+            "SELECT snapshot_id, account_id, balance::VARCHAR, snapshot_time::VARCHAR, source, created_at::VARCHAR, updated_at::VARCHAR
              FROM sys_balance_snapshots WHERE account_id = ? ORDER BY snapshot_time DESC"
         } else {
-            "SELECT snapshot_id, account_id, balance, snapshot_time::VARCHAR, source, created_at::VARCHAR, updated_at::VARCHAR
+            "SELECT snapshot_id, account_id, balance::VARCHAR, snapshot_time::VARCHAR, source, created_at::VARCHAR, updated_at::VARCHAR
              FROM sys_balance_snapshots ORDER BY snapshot_time DESC"
         };
 
@@ -622,7 +622,7 @@ impl DuckDbRepository {
     fn row_to_balance_snapshot(&self, row: &duckdb::Row) -> BalanceSnapshot {
         let id_str: String = row.get(0).unwrap_or_default();
         let account_id_str: String = row.get(1).unwrap_or_default();
-        let balance: f64 = row.get(2).unwrap_or(0.0);
+        let balance_str: String = row.get(2).unwrap_or_default();
         let snapshot_time_str: String = row.get(3).unwrap_or_default();
         let source: Option<String> = row.get(4).ok();
         let created_str: String = row.get(5).unwrap_or_default();
@@ -631,7 +631,7 @@ impl DuckDbRepository {
         BalanceSnapshot {
             id: Uuid::parse_str(&id_str).unwrap_or_else(|_| Uuid::new_v4()),
             account_id: Uuid::parse_str(&account_id_str).unwrap_or_else(|_| Uuid::new_v4()),
-            balance: Decimal::try_from(balance).unwrap_or_default(),
+            balance: Decimal::from_str_exact(&balance_str).unwrap_or_default(),
             snapshot_time: parse_naive_datetime(&snapshot_time_str),
             source,
             created_at: parse_timestamp(&created_str),

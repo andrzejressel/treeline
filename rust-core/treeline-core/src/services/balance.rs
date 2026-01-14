@@ -6,6 +6,7 @@ use std::sync::Arc;
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use rust_decimal::Decimal;
+use rust_decimal::prelude::ToPrimitive;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -349,7 +350,7 @@ impl BalanceService {
                         txs.iter()
                             .map(|tx| TransactionSummary {
                                 description: tx.description.clone().unwrap_or_default(),
-                                amount: tx.amount.to_string().parse().unwrap_or(0.0),
+                                amount: tx.amount.to_f64().unwrap_or(0.0),
                             })
                             .collect()
                     })
@@ -357,11 +358,11 @@ impl BalanceService {
 
                 previews.push(BalanceSnapshotPreview {
                     date: date.format("%Y-%m-%d").to_string(),
-                    balance: current_balance.to_string().parse().unwrap_or(0.0),
-                    daily_change: daily_total.to_string().parse().unwrap_or(0.0),
+                    balance: current_balance.to_f64().unwrap_or(0.0),
+                    daily_change: daily_total.to_f64().unwrap_or(0.0),
                     transactions: day_transactions,
                     is_new: existing.is_none(),
-                    existing_balance: existing_balance.map(|b| b.to_string().parse().unwrap_or(0.0)),
+                    existing_balance: existing_balance.map(|b| b.to_f64().unwrap_or(0.0)),
                     existing_source,
                 });
             }
