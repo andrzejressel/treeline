@@ -50,6 +50,10 @@ pub struct ImportOptions {
     pub skip_rows: u32,
     /// Number format for parsing amounts
     pub number_format: NumberFormat,
+    /// Anchor balance for calculating historical balances (preview only)
+    pub anchor_balance: Option<Decimal>,
+    /// Anchor date for the anchor balance (preview only)
+    pub anchor_date: Option<NaiveDate>,
 }
 
 /// Import service for CSV imports
@@ -307,6 +311,79 @@ impl ImportService {
         // For preview mode, return all parsed transactions without deduplication
         // User wants to see what's in the CSV, not what will be imported
         if preview_only {
+            // If anchor balance is provided and no balance column exists, calculate balances
+            let final_preview_balances = if options.anchor_balance.is_some()
+                && options.anchor_date.is_some()
+                && preview_balances.iter().all(|b| b.is_none())
+            {
+                let anchor_balance = options.anchor_balance.unwrap();
+                let anchor_date = options.anchor_date.unwrap();
+
+                // Calculate per-transaction running balance (like a bank statement)
+                // This shows the balance AFTER each transaction
+
+                // Get unique dates, sorted
+                let mut unique_dates: Vec<NaiveDate> = transactions.iter()
+                    .map(|t| t.transaction_date)
+                    .collect();
+                unique_dates.sort();
+                unique_dates.dedup();
+
+                // Calculate the opening balance for each day by working backwards from anchor
+                // Closing balance on anchor_date = anchor_balance
+                // Opening balance = closing - sum(transactions on that day)
+                let mut day_opening_balance: HashMap<NaiveDate, Decimal> = HashMap::new();
+                let mut closing_balance = anchor_balance;
+
+                for date in unique_dates.iter().rev() {
+                    if *date > anchor_date {
+                        continue; // Skip dates after anchor
+                    }
+
+                    // Sum of transactions on this date
+                    let day_sum: Decimal = transactions.iter()
+                        .filter(|t| t.transaction_date == *date)
+                        .map(|t| t.amount)
+                        .sum();
+
+                    let opening = closing_balance - day_sum;
+                    day_opening_balance.insert(*date, opening);
+
+                    // Previous day's closing = this day's opening
+                    closing_balance = opening;
+                }
+
+                // Calculate per-transaction running balance
+                // For each date, start with opening balance and add each transaction
+                let mut tx_balances: Vec<Option<String>> = vec![None; transactions.len()];
+
+                for date in &unique_dates {
+                    if *date > anchor_date {
+                        continue;
+                    }
+
+                    let mut balance = *day_opening_balance.get(date).unwrap_or(&Decimal::ZERO);
+
+                    // Process transactions for this date in CSV order (original order)
+                    for (idx, tx) in transactions.iter().enumerate() {
+                        if tx.transaction_date == *date {
+                            balance += tx.amount;
+                            tx_balances[idx] = Some(balance.to_string());
+                        }
+                    }
+                }
+
+                tx_balances
+            } else {
+                preview_balances
+            };
+
+            // Sort transactions by date for preview display so running balance flows logically
+            // Then reverse so newest is first (standard bank statement order)
+            let mut sorted_indices: Vec<usize> = (0..transactions.len()).collect();
+            sorted_indices.sort_by_key(|&i| transactions[i].transaction_date);
+            sorted_indices.reverse(); // Newest first
+
             return Ok(ImportResult {
                 batch_id,
                 discovered,
@@ -315,11 +392,14 @@ impl ImportService {
                 fingerprints_checked: 0, // Not checking in preview
                 balance_snapshots_created: 0, // Not creating in preview
                 preview: true,
-                transactions: Some(transactions.iter().enumerate().map(|(i, t)| TransactionPreview {
-                    date: t.transaction_date.to_string(),
-                    amount: t.amount.to_string(),
-                    description: t.description.clone(),
-                    balance: preview_balances.get(i).cloned().flatten(),
+                transactions: Some(sorted_indices.iter().map(|&i| {
+                    let t = &transactions[i];
+                    TransactionPreview {
+                        date: t.transaction_date.to_string(),
+                        amount: t.amount.to_string(),
+                        description: t.description.clone(),
+                        balance: final_preview_balances.get(i).cloned().flatten(),
+                    }
                 }).collect()),
             });
         }
