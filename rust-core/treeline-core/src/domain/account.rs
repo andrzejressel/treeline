@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// A financial account owned by the user
-/// Note: account_type is a freeform string to match Python CLI behavior.
-/// Common values include "checking", "savings", "credit", "investment", "loan"
+/// Note: account_type is a freeform string using Plaid nomenclature.
+/// Common values include "depository", "credit", "investment", "loan", "other"
 /// but any string is accepted.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Account {
@@ -17,6 +17,9 @@ pub struct Account {
     pub name: String,
     pub nickname: Option<String>,
     pub account_type: Option<String>,
+    /// Balance classification: "asset" or "liability"
+    /// Determines how balances affect net worth calculations
+    pub classification: Option<String>,
     /// ISO 4217 currency code, normalized to uppercase
     pub currency: String,
     /// External system identifiers (e.g., SimpleFIN ID)
@@ -38,6 +41,7 @@ impl Account {
             name: name.into(),
             nickname: None,
             account_type: None,
+            classification: Some("asset".to_string()),
             currency: "USD".to_string(),
             external_ids: HashMap::new(),
             balance: None,
@@ -46,6 +50,15 @@ impl Account {
             institution_domain: None,
             created_at: now,
             updated_at: now,
+        }
+    }
+
+    /// Compute classification based on account_type (Plaid nomenclature)
+    /// credit and loan are liabilities, everything else is an asset
+    pub fn compute_classification(account_type: Option<&str>) -> String {
+        match account_type.map(|t| t.to_lowercase()).as_deref() {
+            Some("credit") | Some("loan") => "liability".to_string(),
+            _ => "asset".to_string(),
         }
     }
 

@@ -161,7 +161,8 @@ impl DuckDbRepository {
                     a.created_at, a.updated_at,
                     (SELECT balance FROM sys_balance_snapshots bs
                      WHERE bs.account_id = a.account_id
-                     ORDER BY bs.snapshot_time DESC LIMIT 1) as latest_balance
+                     ORDER BY bs.snapshot_time DESC LIMIT 1) as latest_balance,
+                    a.classification
              FROM sys_accounts a"
         )?;
 
@@ -180,7 +181,8 @@ impl DuckDbRepository {
                     a.created_at, a.updated_at,
                     (SELECT balance FROM sys_balance_snapshots bs
                      WHERE bs.account_id = a.account_id
-                     ORDER BY bs.snapshot_time DESC LIMIT 1) as latest_balance
+                     ORDER BY bs.snapshot_time DESC LIMIT 1) as latest_balance,
+                    a.classification
              FROM sys_accounts a WHERE a.account_id = ?"
         )?;
 
@@ -202,6 +204,7 @@ impl DuckDbRepository {
             name: row.get(1).unwrap_or_default(),
             nickname: row.get(2).ok(),
             account_type: row.get::<_, Option<String>>(3).ok().flatten(),
+            classification: row.get::<_, Option<String>>(12).ok().flatten(),
             currency: row.get(4).unwrap_or_else(|_| "USD".to_string()),
             external_ids: serde_json::from_str(&external_ids_json).unwrap_or_default(),
             institution_name: row.get(6).ok(),
@@ -220,15 +223,17 @@ impl DuckDbRepository {
 
         // Use COALESCE to preserve user-edited values like Python CLI does
         // Note: balance is stored in balance_snapshots, not in accounts table (matching Python schema)
+        // Classification is preserved on sync - we only set it if the user hasn't already set one
         conn.execute(
-            "INSERT INTO sys_accounts (account_id, name, nickname, account_type, currency,
+            "INSERT INTO sys_accounts (account_id, name, nickname, account_type, classification, currency,
                                        external_ids, institution_name, institution_url, institution_domain,
                                        created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (account_id) DO UPDATE SET
                 name = EXCLUDED.name,
                 nickname = COALESCE(sys_accounts.nickname, EXCLUDED.nickname),
                 account_type = COALESCE(sys_accounts.account_type, EXCLUDED.account_type),
+                classification = COALESCE(sys_accounts.classification, EXCLUDED.classification),
                 currency = EXCLUDED.currency,
                 external_ids = EXCLUDED.external_ids,
                 institution_name = COALESCE(EXCLUDED.institution_name, sys_accounts.institution_name),
@@ -240,6 +245,7 @@ impl DuckDbRepository {
                 account.name,
                 account.nickname,
                 account.account_type.as_ref().map(|t| t.to_string()),
+                account.classification.as_ref().map(|c| c.to_string()),
                 account.currency,
                 external_ids,
                 account.institution_name,

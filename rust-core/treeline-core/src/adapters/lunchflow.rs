@@ -387,12 +387,18 @@ impl LunchflowClient {
         let mut external_ids = HashMap::new();
         external_ids.insert("lunchflow".to_string(), lf_account.id.clone());
 
+        // Compute classification based on account_type
+        // Lunchflow doesn't provide account type, so default to asset
+        // Users can override in the UI after sync
+        let classification = Some(Account::compute_classification(None));
+
         Account {
             id: Uuid::new_v4(),
             name: lf_account.name.clone(),
             nickname: None,
             currency: lf_account.currency.clone().unwrap_or_else(|| "USD".to_string()),
             account_type: None, // Lunchflow doesn't provide account type
+            classification,
             external_ids,
             balance: None, // Will be set after fetching balance
             institution_name: Some(lf_account.institution_name.clone()),

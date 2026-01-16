@@ -23,7 +23,8 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             id: Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap(),
             name: "Primary Checking".to_string(),
             nickname: Some("Everyday Spending".to_string()),
-            account_type: Some("checking".to_string()),
+            account_type: Some("depository".to_string()),
+            classification: Some("asset".to_string()),
             currency: "USD".to_string(),
             balance: Some(Decimal::new(482347, 2)), // $4,823.47
             external_ids: {
@@ -41,7 +42,8 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             id: Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap(),
             name: "High-Yield Savings".to_string(),
             nickname: Some("Emergency Fund".to_string()),
-            account_type: Some("savings".to_string()),
+            account_type: Some("depository".to_string()),
+            classification: Some("asset".to_string()),
             currency: "USD".to_string(),
             balance: Some(Decimal::new(1875000, 2)), // $18,750.00
             external_ids: {
@@ -60,6 +62,7 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             name: "Sapphire Reserve".to_string(),
             nickname: Some("Travel Card".to_string()),
             account_type: Some("credit".to_string()),
+            classification: Some("liability".to_string()),
             currency: "USD".to_string(),
             balance: Some(Decimal::new(-284763, 2)), // -$2,847.63
             external_ids: {
@@ -78,6 +81,7 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             name: "Citi Double Cash".to_string(),
             nickname: Some("Cashback Card".to_string()),
             account_type: Some("credit".to_string()),
+            classification: Some("liability".to_string()),
             currency: "USD".to_string(),
             balance: Some(Decimal::new(-124589, 2)), // -$1,245.89
             external_ids: {
@@ -96,6 +100,7 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             name: "Individual Brokerage".to_string(),
             nickname: Some("Investments".to_string()),
             account_type: Some("investment".to_string()),
+            classification: Some("asset".to_string()),
             currency: "USD".to_string(),
             balance: Some(Decimal::new(4782315, 2)), // $47,823.15
             external_ids: {
@@ -114,6 +119,7 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             name: "401(k)".to_string(),
             nickname: Some("Retirement".to_string()),
             account_type: Some("investment".to_string()),
+            classification: Some("asset".to_string()),
             currency: "USD".to_string(),
             balance: Some(Decimal::new(8943267, 2)), // $89,432.67
             external_ids: {

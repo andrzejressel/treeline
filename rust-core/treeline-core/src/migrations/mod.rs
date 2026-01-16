@@ -22,4 +22,5 @@ pub const MIGRATIONS: &[(&str, &str)] = &[
     ("008_simplify_tag_rules.sql", include_str!("008_simplify_tag_rules.sql")),
     ("009_plugin_schemas.sql", include_str!("009_plugin_schemas.sql")),
     ("010_plugin_accounts_schema.sql", include_str!("010_plugin_accounts_schema.sql")),
+    ("011_account_classification.sql", include_str!("011_account_classification.sql")),
 ];

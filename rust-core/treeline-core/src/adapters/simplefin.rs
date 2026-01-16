@@ -258,12 +258,18 @@ impl SimpleFINClient {
         let balance = sf_account.balance.as_ref()
             .and_then(|b| b.parse::<Decimal>().ok());
 
+        // Compute classification based on account_type
+        // SimpleFIN doesn't provide account_type, so default to asset
+        // Users can override in the UI after sync
+        let classification = Some(Account::compute_classification(None));
+
         Account {
             id: Uuid::new_v4(),
             name: sf_account.name.clone(),
             nickname: None,
             currency: sf_account.currency.clone(),
             account_type: None,
+            classification,
             external_ids,
             balance,
             institution_name: sf_account.org.as_ref().and_then(|o| o.name.clone()),
