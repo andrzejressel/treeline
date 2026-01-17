@@ -2,14 +2,13 @@
 //!
 //! Handles communication with the SimpleFIN Bridge API for account and transaction sync.
 
-use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
 use chrono::{DateTime, NaiveDate, TimeZone, Utc};
 use reqwest::blocking::Client;
 use rust_decimal::Decimal;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use url::Url;
 use uuid::Uuid;
 
@@ -71,16 +70,22 @@ pub struct SimpleFINTransaction {
     pub amount: String,
     #[serde(default)]
     pub description: Option<String>,
+    /// UNIX timestamp of actual transaction (optional, may differ from posted)
+    #[serde(rename = "transacted_at", default)]
+    pub transacted_at: Option<i64>,
     #[serde(default)]
-    pub pending: bool,
+    pub pending: Option<bool>,
     #[serde(default)]
     pub extra: Option<SimpleFINTransactionExtra>,
 }
 
-/// Extra transaction metadata
-#[derive(Debug, Deserialize)]
+/// Extra transaction metadata (pass-through JSON blob)
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct SimpleFINTransactionExtra {
     pub category: Option<String>,
+    // Allow any additional fields to be captured
+    #[serde(flatten)]
+    pub other: Option<serde_json::Map<String, serde_json::Value>>,
 }
 
 /// Result of syncing accounts
@@ -251,9 +256,6 @@ impl SimpleFINClient {
 
     /// Map SimpleFIN account to domain Account
     fn map_account(&self, sf_account: &SimpleFINAccount) -> Account {
-        let mut external_ids = HashMap::new();
-        external_ids.insert("simplefin".to_string(), sf_account.id.clone());
-
         // Parse balance if available
         let balance = sf_account.balance.as_ref()
             .and_then(|b| b.parse::<Decimal>().ok());
@@ -263,6 +265,7 @@ impl SimpleFINClient {
         // Users can override in the UI after sync
         let classification = Some(Account::compute_classification(None));
 
+        let now = Utc::now();
         Account {
             id: Uuid::new_v4(),
             name: sf_account.name.clone(),
@@ -270,21 +273,38 @@ impl SimpleFINClient {
             currency: sf_account.currency.clone(),
             account_type: None,
             classification,
-            external_ids,
             balance,
             institution_name: sf_account.org.as_ref().and_then(|o| o.name.clone()),
             institution_url: sf_account.org.as_ref().and_then(|o| o.url.clone()),
             institution_domain: sf_account.org.as_ref().and_then(|o| o.domain.clone()),
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: now,
+            updated_at: now,
+            // Manual flag
+            is_manual: false,
+            // SimpleFIN: Store ALL raw fields from API
+            sf_id: Some(sf_account.id.clone()),
+            sf_name: Some(sf_account.name.clone()),
+            sf_currency: Some(sf_account.currency.clone()),
+            sf_balance: sf_account.balance.clone(),
+            sf_available_balance: sf_account.available_balance.clone(),
+            sf_balance_date: sf_account.balance_date,
+            sf_org_name: sf_account.org.as_ref().and_then(|o| o.name.clone()),
+            sf_org_url: sf_account.org.as_ref().and_then(|o| o.url.clone()),
+            sf_org_domain: sf_account.org.as_ref().and_then(|o| o.domain.clone()),
+            sf_extra: None, // SimpleFIN accounts don't have extra field
+            // Lunchflow fields (not applicable)
+            lf_id: None,
+            lf_name: None,
+            lf_institution_name: None,
+            lf_institution_logo: None,
+            lf_provider: None,
+            lf_currency: None,
+            lf_status: None,
         }
     }
 
     /// Map SimpleFIN transaction to domain Transaction
     fn map_transaction(&self, sf_tx: &SimpleFINTransaction, _sf_account_id: &str) -> Transaction {
-        let mut external_ids = HashMap::new();
-        external_ids.insert("simplefin".to_string(), sf_tx.id.clone());
-
         // Parse amount
         let amount = sf_tx.amount.parse::<Decimal>().unwrap_or_default();
 
@@ -301,19 +321,45 @@ impl SimpleFINClient {
             .map(|c| vec![c])
             .unwrap_or_default();
 
+        // Convert extra to JSON Value for storage
+        let sf_extra = sf_tx.extra.as_ref()
+            .and_then(|e| serde_json::to_value(e).ok());
+
+        let now = Utc::now();
         Transaction {
             id: Uuid::new_v4(),
             account_id: Uuid::nil(), // Will be set by sync service after mapping
             amount,
-            description: sf_tx.description.clone(),
+            description: sf_tx.description.clone(), // Core field mapped from sf_description
             transaction_date: posted_date,
-            posted_date, // NaiveDate, not Option
-            external_ids,
+            posted_date,
             tags,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: now,
+            updated_at: now,
             deleted_at: None,
             parent_transaction_id: None,
+            // CSV Import tracking (not applicable)
+            csv_fingerprint: None,
+            csv_batch_id: None,
+            // Manual flag
+            is_manual: false,
+            // SimpleFIN: Store ALL raw fields from API
+            sf_id: Some(sf_tx.id.clone()),
+            sf_posted: Some(sf_tx.posted),
+            sf_amount: Some(sf_tx.amount.clone()),
+            sf_description: sf_tx.description.clone(),
+            sf_transacted_at: sf_tx.transacted_at,
+            sf_pending: sf_tx.pending,
+            sf_extra,
+            // Lunchflow fields (not applicable)
+            lf_id: None,
+            lf_account_id: None,
+            lf_amount: None,
+            lf_currency: None,
+            lf_date: None,
+            lf_merchant: None,
+            lf_description: None,
+            lf_is_pending: None,
         }
     }
 

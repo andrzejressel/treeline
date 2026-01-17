@@ -72,21 +72,6 @@ impl DoctorService {
             details: if orphaned_snaps.is_empty() { None } else { Some(snap_details) },
         });
 
-        // Duplicate fingerprints
-        let duplicates = self.repository.check_duplicate_fingerprints()?;
-        let dup_details: Vec<serde_json::Value> = duplicates.iter().map(|d| {
-            json!({"fingerprint": d, "count": 2})
-        }).collect();
-        checks.insert("duplicate_fingerprints".to_string(), CheckResult {
-            status: if duplicates.is_empty() { "pass" } else { "warning" }.to_string(),
-            message: if duplicates.is_empty() {
-                "No duplicate fingerprints found".to_string()
-            } else {
-                format!("{} set(s) of potential duplicate transactions found", duplicates.len())
-            },
-            details: if duplicates.is_empty() { None } else { Some(dup_details) },
-        });
-
         // Date sanity - check both past (before 1970) and future (more than 1 year ahead)
         let insane_dates = self.repository.check_date_sanity()?;
         let date_details: Vec<serde_json::Value> = insane_dates.iter().map(|d| {

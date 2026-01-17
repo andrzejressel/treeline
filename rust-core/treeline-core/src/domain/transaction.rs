@@ -1,11 +1,10 @@
 //! Transaction domain model
 
-use std::collections::HashMap;
-
 use chrono::{DateTime, NaiveDate, Utc};
 use regex::Regex;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
@@ -14,10 +13,6 @@ use uuid::Uuid;
 pub struct Transaction {
     pub id: Uuid,
     pub account_id: Uuid,
-    /// External system identifiers (includes "fingerprint" for deduplication)
-    pub external_ids: HashMap<String, String>,
-    /// COMMENT: since we are porting, should we reconsider amount storage
-    /// in the database? Should we store as integer? Please recommend what you think.
     pub amount: Decimal,
     pub description: Option<String>,
     pub transaction_date: NaiveDate,
@@ -30,6 +25,58 @@ pub struct Transaction {
     pub deleted_at: Option<DateTime<Utc>>,
     /// Parent transaction ID for splits
     pub parent_transaction_id: Option<Uuid>,
+
+    // =========================================================================
+    // CSV Import tracking
+    // =========================================================================
+    /// Hash for CSV re-import protection
+    pub csv_fingerprint: Option<String>,
+    /// Which import batch this transaction belongs to
+    pub csv_batch_id: Option<String>,
+
+    // =========================================================================
+    // Manual flag
+    // =========================================================================
+    /// True if this transaction was manually created by the user
+    pub is_manual: bool,
+
+    // =========================================================================
+    // SimpleFIN: ALL fields from API (https://www.simplefin.org/protocol.html)
+    // =========================================================================
+    /// SimpleFIN transaction ID (required for dedup)
+    pub sf_id: Option<String>,
+    /// UNIX timestamp when posted (required)
+    pub sf_posted: Option<i64>,
+    /// Raw amount string (required)
+    pub sf_amount: Option<String>,
+    /// Raw description (required)
+    pub sf_description: Option<String>,
+    /// UNIX timestamp of actual transaction (optional)
+    pub sf_transacted_at: Option<i64>,
+    /// Is transaction pending (optional)
+    pub sf_pending: Option<bool>,
+    /// Extra blob pass-through (optional)
+    pub sf_extra: Option<JsonValue>,
+
+    // =========================================================================
+    // Lunchflow: ALL fields from API
+    // =========================================================================
+    /// Lunchflow transaction ID (required for dedup)
+    pub lf_id: Option<String>,
+    /// Lunchflow account ID
+    pub lf_account_id: Option<String>,
+    /// Raw amount
+    pub lf_amount: Option<Decimal>,
+    /// Currency code
+    pub lf_currency: Option<String>,
+    /// Transaction date
+    pub lf_date: Option<NaiveDate>,
+    /// Merchant/counterparty name
+    pub lf_merchant: Option<String>,
+    /// Description/memo
+    pub lf_description: Option<String>,
+    /// Is transaction pending
+    pub lf_is_pending: Option<bool>,
 }
 
 impl Transaction {
@@ -41,10 +88,9 @@ impl Transaction {
         transaction_date: NaiveDate,
     ) -> Self {
         let now = Utc::now();
-        let mut tx = Self {
+        Self {
             id,
             account_id,
-            external_ids: HashMap::new(),
             amount,
             description: None,
             transaction_date,
@@ -54,23 +100,41 @@ impl Transaction {
             updated_at: now,
             deleted_at: None,
             parent_transaction_id: None,
-        };
-        // Generate fingerprint on creation
-        tx.ensure_fingerprint();
-        tx
+            // CSV Import tracking
+            csv_fingerprint: None,
+            csv_batch_id: None,
+            // Manual flag
+            is_manual: false,
+            // SimpleFIN fields
+            sf_id: None,
+            sf_posted: None,
+            sf_amount: None,
+            sf_description: None,
+            sf_transacted_at: None,
+            sf_pending: None,
+            sf_extra: None,
+            // Lunchflow fields
+            lf_id: None,
+            lf_account_id: None,
+            lf_amount: None,
+            lf_currency: None,
+            lf_date: None,
+            lf_merchant: None,
+            lf_description: None,
+            lf_is_pending: None,
+        }
     }
 
-    /// Ensure fingerprint exists in external_ids
+    /// Ensure csv_fingerprint is set
     pub fn ensure_fingerprint(&mut self) {
-        if !self.external_ids.contains_key("fingerprint") {
-            let fingerprint = self.calculate_fingerprint();
-            self.external_ids.insert("fingerprint".to_string(), fingerprint);
+        if self.csv_fingerprint.is_none() {
+            self.csv_fingerprint = Some(self.calculate_fingerprint());
         }
     }
 
     /// Get the fingerprint if present
     pub fn fingerprint(&self) -> Option<&str> {
-        self.external_ids.get("fingerprint").map(|s| s.as_str())
+        self.csv_fingerprint.as_deref()
     }
 
     /// Calculate fingerprint hash for deduplication

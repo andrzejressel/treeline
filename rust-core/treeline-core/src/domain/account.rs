@@ -1,10 +1,9 @@
 //! Account domain model
 
-use std::collections::HashMap;
-
 use chrono::{DateTime, Utc};
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
 /// A financial account owned by the user
@@ -22,14 +21,60 @@ pub struct Account {
     pub classification: Option<String>,
     /// ISO 4217 currency code, normalized to uppercase
     pub currency: String,
-    /// External system identifiers (e.g., SimpleFIN ID)
-    pub external_ids: HashMap<String, String>,
     pub balance: Option<Decimal>,
     pub institution_name: Option<String>,
     pub institution_url: Option<String>,
     pub institution_domain: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+
+    // =========================================================================
+    // Manual flag
+    // =========================================================================
+    /// True if this account was manually created by the user
+    pub is_manual: bool,
+
+    // =========================================================================
+    // SimpleFIN: ALL fields from API (https://www.simplefin.org/protocol.html)
+    // =========================================================================
+    /// SimpleFIN account ID (required for dedup)
+    pub sf_id: Option<String>,
+    /// Account name
+    pub sf_name: Option<String>,
+    /// ISO 4217 currency code
+    pub sf_currency: Option<String>,
+    /// Raw balance string
+    pub sf_balance: Option<String>,
+    /// Available balance (optional)
+    pub sf_available_balance: Option<String>,
+    /// UNIX timestamp of balance
+    pub sf_balance_date: Option<i64>,
+    /// Institution name
+    pub sf_org_name: Option<String>,
+    /// Institution URL
+    pub sf_org_url: Option<String>,
+    /// Institution domain
+    pub sf_org_domain: Option<String>,
+    /// Extra blob pass-through (optional)
+    pub sf_extra: Option<JsonValue>,
+
+    // =========================================================================
+    // Lunchflow: ALL fields from API
+    // =========================================================================
+    /// Lunchflow account ID (required for dedup)
+    pub lf_id: Option<String>,
+    /// Account name
+    pub lf_name: Option<String>,
+    /// Bank/institution name
+    pub lf_institution_name: Option<String>,
+    /// Logo URL
+    pub lf_institution_logo: Option<String>,
+    /// Provider: "gocardless", "quiltt", etc.
+    pub lf_provider: Option<String>,
+    /// Currency code
+    pub lf_currency: Option<String>,
+    /// Status: "ACTIVE", "DISCONNECTED", "ERROR"
+    pub lf_status: Option<String>,
 }
 
 impl Account {
@@ -43,13 +88,33 @@ impl Account {
             account_type: None,
             classification: Some("asset".to_string()),
             currency: "USD".to_string(),
-            external_ids: HashMap::new(),
             balance: None,
             institution_name: None,
             institution_url: None,
             institution_domain: None,
             created_at: now,
             updated_at: now,
+            // Manual flag
+            is_manual: false,
+            // SimpleFIN fields
+            sf_id: None,
+            sf_name: None,
+            sf_currency: None,
+            sf_balance: None,
+            sf_available_balance: None,
+            sf_balance_date: None,
+            sf_org_name: None,
+            sf_org_url: None,
+            sf_org_domain: None,
+            sf_extra: None,
+            // Lunchflow fields
+            lf_id: None,
+            lf_name: None,
+            lf_institution_name: None,
+            lf_institution_logo: None,
+            lf_provider: None,
+            lf_currency: None,
+            lf_status: None,
         }
     }
 

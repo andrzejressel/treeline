@@ -5,7 +5,6 @@
 //!
 //! API Documentation: https://docs.lunchflow.app/api-reference
 
-use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::{Context, Result};
@@ -256,11 +255,18 @@ impl LunchflowClient {
                         created_at: Utc::now(),
                         updated_at: Utc::now(),
                     });
-                    // Update account with fetched balance
+                    // Update account with fetched balance and currency
                     let mut account = account;
                     account.balance = Some(balance);
-                    if account.currency == "USD" && !currency.is_empty() {
-                        account.currency = currency;
+                    if !currency.is_empty() {
+                        // Update both core currency and lf_currency from balance response
+                        if account.currency == "USD" {
+                            account.currency = currency.clone();
+                        }
+                        // Always set lf_currency if not already set
+                        if account.lf_currency.is_none() {
+                            account.lf_currency = Some(currency);
+                        }
                     }
                     domain_accounts.push(account);
                 }
@@ -326,7 +332,7 @@ impl LunchflowClient {
                 accounts
                     .accounts
                     .iter()
-                    .filter_map(|a| a.external_ids.get("lunchflow").cloned())
+                    .filter_map(|a| a.lf_id.clone())
                     .collect()
             }
         };
@@ -384,14 +390,12 @@ impl LunchflowClient {
 
     /// Map Lunchflow account to domain Account
     fn map_account(&self, lf_account: &LunchflowAccount) -> Account {
-        let mut external_ids = HashMap::new();
-        external_ids.insert("lunchflow".to_string(), lf_account.id.clone());
-
         // Compute classification based on account_type
         // Lunchflow doesn't provide account type, so default to asset
         // Users can override in the UI after sync
         let classification = Some(Account::compute_classification(None));
 
+        let now = Utc::now();
         Account {
             id: Uuid::new_v4(),
             name: lf_account.name.clone(),
@@ -399,45 +403,81 @@ impl LunchflowClient {
             currency: lf_account.currency.clone().unwrap_or_else(|| "USD".to_string()),
             account_type: None, // Lunchflow doesn't provide account type
             classification,
-            external_ids,
             balance: None, // Will be set after fetching balance
             institution_name: Some(lf_account.institution_name.clone()),
             institution_url: None,
             institution_domain: None,
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: now,
+            updated_at: now,
+            // Manual flag
+            is_manual: false,
+            // SimpleFIN fields (not applicable)
+            sf_id: None,
+            sf_name: None,
+            sf_currency: None,
+            sf_balance: None,
+            sf_available_balance: None,
+            sf_balance_date: None,
+            sf_org_name: None,
+            sf_org_url: None,
+            sf_org_domain: None,
+            sf_extra: None,
+            // Lunchflow: Store ALL raw fields from API
+            lf_id: Some(lf_account.id.clone()),
+            lf_name: Some(lf_account.name.clone()),
+            lf_institution_name: Some(lf_account.institution_name.clone()),
+            lf_institution_logo: lf_account.institution_logo.clone(),
+            lf_provider: lf_account.provider.clone(),
+            lf_currency: lf_account.currency.clone(),
+            lf_status: lf_account.status.clone(),
         }
     }
 
     /// Map Lunchflow transaction to domain Transaction
     fn map_transaction(&self, lf_tx: &LunchflowTransaction) -> Transaction {
-        let mut external_ids = HashMap::new();
-        external_ids.insert("lunchflow".to_string(), lf_tx.id.clone());
-
         let posted_date = NaiveDate::parse_from_str(&lf_tx.date, "%Y-%m-%d")
             .unwrap_or_else(|_| Utc::now().naive_utc().date());
 
-        // Combine merchant and description to preserve all info
-        let description = match (&lf_tx.merchant, &lf_tx.description) {
-            (Some(m), Some(d)) if m != d => Some(format!("{} - {}", m, d)),
-            (Some(m), _) => Some(m.clone()),
-            (None, Some(d)) => Some(d.clone()),
-            (None, None) => None,
-        };
+        // Map lf_description to core description (full transaction description)
+        // Falls back to lf_merchant if no description provided
+        // Both raw fields are stored for power users
+        let description = lf_tx.description.clone().or_else(|| lf_tx.merchant.clone());
 
+        let now = Utc::now();
         Transaction {
             id: Uuid::new_v4(),
             account_id: Uuid::nil(), // Will be set by sync service after mapping
             amount: lf_tx.amount,
-            description,
+            description, // Core field mapped from lf_description
             transaction_date: posted_date,
             posted_date,
-            external_ids,
             tags: vec![],
-            created_at: Utc::now(),
-            updated_at: Utc::now(),
+            created_at: now,
+            updated_at: now,
             deleted_at: None,
             parent_transaction_id: None,
+            // CSV Import tracking (not applicable)
+            csv_fingerprint: None,
+            csv_batch_id: None,
+            // Manual flag
+            is_manual: false,
+            // SimpleFIN fields (not applicable)
+            sf_id: None,
+            sf_posted: None,
+            sf_amount: None,
+            sf_description: None,
+            sf_transacted_at: None,
+            sf_pending: None,
+            sf_extra: None,
+            // Lunchflow: Store ALL raw fields from API
+            lf_id: Some(lf_tx.id.clone()),
+            lf_account_id: lf_tx.account_id.clone(),
+            lf_amount: Some(lf_tx.amount),
+            lf_currency: Some(lf_tx.currency.clone()),
+            lf_date: Some(posted_date),
+            lf_merchant: lf_tx.merchant.clone(),
+            lf_description: lf_tx.description.clone(),
+            lf_is_pending: Some(lf_tx.is_pending),
         }
     }
 
@@ -671,10 +711,8 @@ mod tests {
         assert_eq!(account.name, "Test Account");
         assert_eq!(account.currency, "EUR");
         assert_eq!(account.institution_name, Some("Test Bank".to_string()));
-        assert_eq!(
-            account.external_ids.get("lunchflow"),
-            Some(&"123".to_string())
-        );
+        assert_eq!(account.lf_id, Some("123".to_string()));
+        assert_eq!(account.lf_currency, Some("EUR".to_string()));
     }
 
     #[test]
@@ -693,32 +731,35 @@ mod tests {
         let client = LunchflowClient::new_with_base_url("test_key", "http://localhost").unwrap();
         let tx = client.map_transaction(&lf_tx);
 
-        // Both merchant and description combined
-        assert_eq!(tx.description, Some("Coffee Shop - Card payment".to_string()));
+        // Core description = lf_description (full description), merchant stored separately
+        assert_eq!(tx.description, Some("Card payment".to_string()));
+        assert_eq!(tx.lf_merchant, Some("Coffee Shop".to_string()));
+        assert_eq!(tx.lf_description, Some("Card payment".to_string()));
         assert_eq!(tx.amount, Decimal::new(-4250, 2));
-        assert_eq!(
-            tx.external_ids.get("lunchflow"),
-            Some(&"tx_456".to_string())
-        );
+        assert_eq!(tx.lf_id, Some("tx_456".to_string()));
+        assert_eq!(tx.lf_currency, Some("EUR".to_string()));
     }
 
     #[test]
-    fn test_transaction_mapping_no_merchant() {
+    fn test_transaction_mapping_no_description() {
         let lf_tx = LunchflowTransaction {
             id: "tx_789".to_string(),
             account_id: None,
             date: "2025-01-15".to_string(),
             amount: Decimal::new(10000, 2),
             currency: "USD".to_string(),
-            merchant: None,
-            description: Some("Direct deposit".to_string()),
+            merchant: Some("Employer Inc".to_string()),
+            description: None,
             is_pending: false,
         };
 
         let client = LunchflowClient::new_with_base_url("test_key", "http://localhost").unwrap();
         let tx = client.map_transaction(&lf_tx);
 
-        assert_eq!(tx.description, Some("Direct deposit".to_string())); // falls back to description
+        // Falls back to lf_merchant when no description
+        assert_eq!(tx.description, Some("Employer Inc".to_string()));
+        assert_eq!(tx.lf_merchant, Some("Employer Inc".to_string()));
+        assert_eq!(tx.lf_description, None);
     }
 
     #[test]

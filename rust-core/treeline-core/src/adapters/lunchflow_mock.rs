@@ -427,7 +427,7 @@ mod tests {
         let result = client.get_accounts().unwrap();
 
         assert_eq!(result.accounts.len(), 5);
-        assert!(result.accounts[0].external_ids.contains_key("lunchflow"));
+        assert!(result.accounts[0].lf_id.is_some());
     }
 
     #[test]
@@ -445,7 +445,7 @@ mod tests {
         let account_ids: Vec<String> = accounts
             .accounts
             .iter()
-            .filter_map(|a| a.external_ids.get("lunchflow").cloned())
+            .filter_map(|a| a.lf_id.clone())
             .collect();
 
         let today = Utc::now().naive_utc().date();

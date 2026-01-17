@@ -23,4 +23,8 @@ pub const MIGRATIONS: &[(&str, &str)] = &[
     ("009_plugin_schemas.sql", include_str!("009_plugin_schemas.sql")),
     ("010_plugin_accounts_schema.sql", include_str!("010_plugin_accounts_schema.sql")),
     ("011_account_classification.sql", include_str!("011_account_classification.sql")),
+    ("012_provider_specific_columns.sql", include_str!("012_provider_specific_columns.sql")),
+    // Note: external_ids column is orphaned but kept due to DuckDB ALTER TABLE limitations
+    // The column stores '{}' for new data and is not read by any code
+    ("013_refresh_accounts_view.sql", include_str!("013_refresh_accounts_view.sql")),
 ];

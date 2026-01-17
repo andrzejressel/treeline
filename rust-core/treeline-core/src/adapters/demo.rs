@@ -5,7 +5,6 @@
 //! - 180 days of transactions with realistic patterns
 //! - 180 days of balance history for all accounts
 
-use std::collections::HashMap;
 use std::f64::consts::PI;
 
 use chrono::{Datelike, NaiveDate, Utc, Duration};
@@ -27,16 +26,17 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             classification: Some("asset".to_string()),
             currency: "USD".to_string(),
             balance: Some(Decimal::new(482347, 2)), // $4,823.47
-            external_ids: {
-                let mut m = HashMap::new();
-                m.insert("demo".to_string(), "demo-checking-001".to_string());
-                m
-            },
             institution_name: Some("Chase".to_string()),
             institution_url: Some("https://chase.com".to_string()),
             institution_domain: Some("chase.com".to_string()),
             created_at: now,
             updated_at: now,
+            // Demo accounts are identified by name for deduplication
+            is_manual: false,
+            sf_id: None, sf_name: None, sf_currency: None, sf_balance: None, sf_available_balance: None,
+            sf_balance_date: None, sf_org_name: None, sf_org_url: None, sf_org_domain: None, sf_extra: None,
+            lf_id: None, lf_name: None, lf_institution_name: None, lf_institution_logo: None,
+            lf_provider: None, lf_currency: None, lf_status: None,
         },
         Account {
             id: Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap(),
@@ -46,16 +46,16 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             classification: Some("asset".to_string()),
             currency: "USD".to_string(),
             balance: Some(Decimal::new(1875000, 2)), // $18,750.00
-            external_ids: {
-                let mut m = HashMap::new();
-                m.insert("demo".to_string(), "demo-savings-001".to_string());
-                m
-            },
             institution_name: Some("Marcus by Goldman Sachs".to_string()),
             institution_url: Some("https://marcus.com".to_string()),
             institution_domain: Some("marcus.com".to_string()),
             created_at: now,
             updated_at: now,
+            is_manual: false,
+            sf_id: None, sf_name: None, sf_currency: None, sf_balance: None, sf_available_balance: None,
+            sf_balance_date: None, sf_org_name: None, sf_org_url: None, sf_org_domain: None, sf_extra: None,
+            lf_id: None, lf_name: None, lf_institution_name: None, lf_institution_logo: None,
+            lf_provider: None, lf_currency: None, lf_status: None,
         },
         Account {
             id: Uuid::parse_str("33333333-3333-3333-3333-333333333333").unwrap(),
@@ -65,16 +65,16 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             classification: Some("liability".to_string()),
             currency: "USD".to_string(),
             balance: Some(Decimal::new(-284763, 2)), // -$2,847.63
-            external_ids: {
-                let mut m = HashMap::new();
-                m.insert("demo".to_string(), "demo-credit-001".to_string());
-                m
-            },
             institution_name: Some("Chase".to_string()),
             institution_url: Some("https://chase.com".to_string()),
             institution_domain: Some("chase.com".to_string()),
             created_at: now,
             updated_at: now,
+            is_manual: false,
+            sf_id: None, sf_name: None, sf_currency: None, sf_balance: None, sf_available_balance: None,
+            sf_balance_date: None, sf_org_name: None, sf_org_url: None, sf_org_domain: None, sf_extra: None,
+            lf_id: None, lf_name: None, lf_institution_name: None, lf_institution_logo: None,
+            lf_provider: None, lf_currency: None, lf_status: None,
         },
         Account {
             id: Uuid::parse_str("44444444-4444-4444-4444-444444444444").unwrap(),
@@ -84,16 +84,16 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             classification: Some("liability".to_string()),
             currency: "USD".to_string(),
             balance: Some(Decimal::new(-124589, 2)), // -$1,245.89
-            external_ids: {
-                let mut m = HashMap::new();
-                m.insert("demo".to_string(), "demo-credit-002".to_string());
-                m
-            },
             institution_name: Some("Citi".to_string()),
             institution_url: Some("https://citi.com".to_string()),
             institution_domain: Some("citi.com".to_string()),
             created_at: now,
             updated_at: now,
+            is_manual: false,
+            sf_id: None, sf_name: None, sf_currency: None, sf_balance: None, sf_available_balance: None,
+            sf_balance_date: None, sf_org_name: None, sf_org_url: None, sf_org_domain: None, sf_extra: None,
+            lf_id: None, lf_name: None, lf_institution_name: None, lf_institution_logo: None,
+            lf_provider: None, lf_currency: None, lf_status: None,
         },
         Account {
             id: Uuid::parse_str("55555555-5555-5555-5555-555555555555").unwrap(),
@@ -103,16 +103,16 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             classification: Some("asset".to_string()),
             currency: "USD".to_string(),
             balance: Some(Decimal::new(4782315, 2)), // $47,823.15
-            external_ids: {
-                let mut m = HashMap::new();
-                m.insert("demo".to_string(), "demo-investment-001".to_string());
-                m
-            },
             institution_name: Some("Fidelity".to_string()),
             institution_url: Some("https://fidelity.com".to_string()),
             institution_domain: Some("fidelity.com".to_string()),
             created_at: now,
             updated_at: now,
+            is_manual: false,
+            sf_id: None, sf_name: None, sf_currency: None, sf_balance: None, sf_available_balance: None,
+            sf_balance_date: None, sf_org_name: None, sf_org_url: None, sf_org_domain: None, sf_extra: None,
+            lf_id: None, lf_name: None, lf_institution_name: None, lf_institution_logo: None,
+            lf_provider: None, lf_currency: None, lf_status: None,
         },
         Account {
             id: Uuid::parse_str("66666666-6666-6666-6666-666666666666").unwrap(),
@@ -122,16 +122,16 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             classification: Some("asset".to_string()),
             currency: "USD".to_string(),
             balance: Some(Decimal::new(8943267, 2)), // $89,432.67
-            external_ids: {
-                let mut m = HashMap::new();
-                m.insert("demo".to_string(), "demo-401k-001".to_string());
-                m
-            },
             institution_name: Some("Fidelity".to_string()),
             institution_url: Some("https://fidelity.com".to_string()),
             institution_domain: Some("fidelity.com".to_string()),
             created_at: now,
             updated_at: now,
+            is_manual: false,
+            sf_id: None, sf_name: None, sf_currency: None, sf_balance: None, sf_available_balance: None,
+            sf_balance_date: None, sf_org_name: None, sf_org_url: None, sf_org_domain: None, sf_extra: None,
+            lf_id: None, lf_name: None, lf_institution_name: None, lf_institution_logo: None,
+            lf_provider: None, lf_currency: None, lf_status: None,
         },
     ]
 }
@@ -373,21 +373,12 @@ fn create_transaction(
     tags: Vec<String>,
     now: chrono::DateTime<Utc>,
 ) -> Transaction {
-    // Generate a deterministic external ID based on account, date, amount, and description
-    // This allows deduplication during sync (same data = same external ID)
-    let external_id = format!("demo-{}-{}-{}-{}",
-        &account_id.to_string()[..8],
-        date,
-        amount.to_string().replace('.', "").replace('-', "n"),
-        description.chars().filter(|c| c.is_alphanumeric()).take(20).collect::<String>().to_lowercase()
-    );
-
     let mut tx = Transaction::new(Uuid::new_v4(), account_id, amount, date);
     tx.description = Some(description.to_string());
     tx.tags = tags;
     tx.created_at = now;
     tx.updated_at = now;
-    tx.external_ids.insert("demo".to_string(), external_id);
+    // Fingerprint will be calculated by the sync service for deduplication
     tx
 }
 
@@ -584,12 +575,19 @@ impl DataAggregationProvider for DemoDataProvider {
         let transactions = generate_demo_transactions();
 
         // Convert to (provider_account_id, Transaction) pairs
+        // For demo mode, we use account name as the provider ID (matched in sync service)
+        let accounts = generate_demo_accounts();
+        let account_id_to_name: std::collections::HashMap<Uuid, String> = accounts
+            .into_iter()
+            .map(|a| (a.id, a.name))
+            .collect();
+
         let txs_with_ids: Vec<(String, Transaction)> = transactions
             .into_iter()
             .map(|tx| {
-                // Get the demo external ID for this transaction's account
-                let provider_account_id = tx.external_ids
-                    .get("demo")
+                // Use account name as provider account ID for demo mode
+                let provider_account_id = account_id_to_name
+                    .get(&tx.account_id)
                     .cloned()
                     .unwrap_or_else(|| tx.account_id.to_string());
                 (provider_account_id, tx)

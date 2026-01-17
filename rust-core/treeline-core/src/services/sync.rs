@@ -114,27 +114,53 @@ impl SyncService {
         let mut provider_warnings = accounts_result.warnings;
 
         // Build map of provider external ID to internal account ID
+        // Use provider-specific columns (sf_id/lf_id) for mapping
         let existing_accounts = self.repository.get_accounts()?;
         let mut external_to_internal: HashMap<String, Uuid> = HashMap::new();
 
         for existing in &existing_accounts {
-            if let Some(ext_id) = existing.external_ids.get(name) {
-                external_to_internal.insert(ext_id.clone(), existing.id);
+            // Get provider-specific ID column
+            let ext_id = match name {
+                "simplefin" => existing.sf_id.clone(),
+                "lunchflow" => existing.lf_id.clone(),
+                // Demo mode: use the account name as the external ID (stable across syncs)
+                "demo" => Some(existing.name.clone()),
+                _ => None,
+            };
+
+            if let Some(id) = ext_id {
+                external_to_internal.insert(id, existing.id);
             }
         }
 
         // Track original account IDs for balance snapshot mapping
         let mut orig_to_ext: HashMap<Uuid, String> = HashMap::new();
         for account in &accounts_result.accounts {
-            if let Some(ext_id) = account.external_ids.get(name) {
-                orig_to_ext.insert(account.id, ext_id.clone());
+            let ext_id = match name {
+                "simplefin" => account.sf_id.clone(),
+                "lunchflow" => account.lf_id.clone(),
+                // Demo mode: use the account name as the external ID
+                "demo" => Some(account.name.clone()),
+                _ => None,
+            };
+
+            if let Some(id) = ext_id {
+                orig_to_ext.insert(account.id, id);
             }
         }
 
         // Process accounts
         let mut accounts_synced = 0i64;
         for mut account in accounts_result.accounts {
-            let ext_id = account.external_ids.get(name).cloned().unwrap_or_default();
+            // Get external ID from provider-specific column
+            let ext_id = match name {
+                "simplefin" => account.sf_id.clone(),
+                "lunchflow" => account.lf_id.clone(),
+                // Demo mode: use the account name as the external ID
+                "demo" => Some(account.name.clone()),
+                _ => None,
+            };
+            let ext_id = ext_id.unwrap_or_default();
 
             if let Some(&existing_id) = external_to_internal.get(&ext_id) {
                 // Existing account - update ID
@@ -229,7 +255,7 @@ impl SyncService {
     /// Process transactions with deduplication logic
     ///
     /// Deduplication strategy:
-    /// 1. Check by provider-specific external ID (e.g., simplefin transaction ID)
+    /// 1. Check by provider-specific ID column (sf_id or lf_id) - indexed, fast
     /// 2. Check by fingerprint (account + date + amount + description hash)
     ///
     /// If either exists, skip the transaction to preserve user edits.
@@ -252,22 +278,28 @@ impl SyncService {
             };
             tx.account_id = internal_account_id;
 
-            // Generate fingerprint for deduplication
-            let fingerprint = tx.calculate_fingerprint();
-            tx.external_ids.insert("fingerprint".to_string(), fingerprint.clone());
-
-            // Check if exists by provider external ID
-            let exists_by_ext_id = if let Some(ext_id) = tx.external_ids.get(provider_name) {
-                self.repository.transaction_exists_by_external_id(provider_name, ext_id)?
-            } else {
-                false
+            // Check if exists by provider-specific ID column (indexed, fast)
+            // Note: csv_fingerprint is only for CSV imports, not provider syncs
+            let already_exists = match provider_name {
+                "simplefin" => {
+                    if let Some(ref sf_id) = tx.sf_id {
+                        self.repository.transaction_exists_by_sf_id(sf_id)?
+                    } else {
+                        false
+                    }
+                }
+                "lunchflow" => {
+                    if let Some(ref lf_id) = tx.lf_id {
+                        self.repository.transaction_exists_by_lf_id(lf_id)?
+                    } else {
+                        false
+                    }
+                }
+                // Demo mode: no provider ID, always insert (demo has its own DB)
+                _ => false,
             };
 
-            // Check if exists by fingerprint
-            let exists_by_fingerprint = self.repository
-                .transaction_exists_by_external_id("fingerprint", &fingerprint)?;
-
-            if exists_by_ext_id || exists_by_fingerprint {
+            if already_exists {
                 skipped_count += 1;
             } else {
                 new_count += 1;

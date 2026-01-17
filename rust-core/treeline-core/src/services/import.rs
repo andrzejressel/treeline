@@ -276,7 +276,8 @@ impl ImportService {
 
             let mut tx = Transaction::new(Uuid::new_v4(), account_uuid, amount, date);
             tx.description = description;
-            tx.external_ids.insert("fingerprint".to_string(), fingerprint);
+            // Use dedicated csv_fingerprint column for deduplication
+            tx.csv_fingerprint = Some(fingerprint.clone());
 
             transactions.push(tx);
 
@@ -404,13 +405,14 @@ impl ImportService {
             });
         }
 
-        // Deduplicate: check which fingerprints already exist
+        // Deduplicate: check which fingerprints already exist in csv_fingerprint column
         let mut new_transactions = Vec::new();
         let mut duplicate_count = 0i64;
 
         for tx in transactions {
-            if let Some(fingerprint) = tx.external_ids.get("fingerprint") {
-                if self.repository.transaction_exists_by_external_id("fingerprint", fingerprint)? {
+            if let Some(fp) = tx.csv_fingerprint.as_ref() {
+                // Check csv_fingerprint column for existing transactions
+                if self.repository.csv_fingerprint_exists_in_other_batches(fp, "")? {
                     duplicate_count += 1;
                     continue;
                 }
@@ -422,7 +424,8 @@ impl ImportService {
 
         // Add batch_id to each transaction before inserting
         for tx in &mut new_transactions {
-            tx.external_ids.insert("csv_import.batch_id".to_string(), batch_id.clone());
+            // Use dedicated csv_batch_id column
+            tx.csv_batch_id = Some(batch_id.clone());
         }
 
         // Collect IDs for auto-tagging

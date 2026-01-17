@@ -162,7 +162,11 @@ impl DuckDbRepository {
                     (SELECT balance FROM sys_balance_snapshots bs
                      WHERE bs.account_id = a.account_id
                      ORDER BY bs.snapshot_time DESC LIMIT 1) as latest_balance,
-                    a.classification
+                    a.classification, a.is_manual,
+                    a.sf_id, a.sf_name, a.sf_currency, a.sf_balance, a.sf_available_balance,
+                    a.sf_balance_date, a.sf_org_name, a.sf_org_url, a.sf_org_domain, a.sf_extra,
+                    a.lf_id, a.lf_name, a.lf_institution_name, a.lf_institution_logo,
+                    a.lf_provider, a.lf_currency, a.lf_status
              FROM sys_accounts a"
         )?;
 
@@ -182,7 +186,11 @@ impl DuckDbRepository {
                     (SELECT balance FROM sys_balance_snapshots bs
                      WHERE bs.account_id = a.account_id
                      ORDER BY bs.snapshot_time DESC LIMIT 1) as latest_balance,
-                    a.classification
+                    a.classification, a.is_manual,
+                    a.sf_id, a.sf_name, a.sf_currency, a.sf_balance, a.sf_available_balance,
+                    a.sf_balance_date, a.sf_org_name, a.sf_org_url, a.sf_org_domain, a.sf_extra,
+                    a.lf_id, a.lf_name, a.lf_institution_name, a.lf_institution_logo,
+                    a.lf_provider, a.lf_currency, a.lf_status
              FROM sys_accounts a WHERE a.account_id = ?"
         )?;
 
@@ -194,10 +202,19 @@ impl DuckDbRepository {
     }
 
     fn row_to_account(&self, row: &duckdb::Row) -> Account {
+        // Column indices from SELECT:
+        // 0: account_id, 1: name, 2: nickname, 3: account_type, 4: currency,
+        // 5: external_ids, 6: institution_name, 7: institution_url, 8: institution_domain,
+        // 9: created_at, 10: updated_at, 11: latest_balance, 12: classification, 13: is_manual,
+        // 14: sf_id, 15: sf_name, 16: sf_currency, 17: sf_balance, 18: sf_available_balance,
+        // 19: sf_balance_date, 20: sf_org_name, 21: sf_org_url, 22: sf_org_domain, 23: sf_extra,
+        // 24: lf_id, 25: lf_name, 26: lf_institution_name, 27: lf_institution_logo,
+        // 28: lf_provider, 29: lf_currency, 30: lf_status
         let id_str: String = row.get(0).unwrap_or_default();
-        let external_ids_json: String = row.get(5).unwrap_or_else(|_| "{}".to_string());
+        // Note: column 5 (external_ids) is read but not used - kept for backwards compat
         let created_str: String = row.get(9).unwrap_or_default();
         let updated_str: String = row.get(10).unwrap_or_default();
+        let sf_extra_json: Option<String> = row.get(23).ok();
 
         Account {
             id: Uuid::parse_str(&id_str).unwrap_or_else(|_| Uuid::new_v4()),
@@ -206,7 +223,6 @@ impl DuckDbRepository {
             account_type: row.get::<_, Option<String>>(3).ok().flatten(),
             classification: row.get::<_, Option<String>>(12).ok().flatten(),
             currency: row.get(4).unwrap_or_else(|_| "USD".to_string()),
-            external_ids: serde_json::from_str(&external_ids_json).unwrap_or_default(),
             institution_name: row.get(6).ok(),
             institution_url: row.get(7).ok(),
             institution_domain: row.get(8).ok(),
@@ -214,12 +230,35 @@ impl DuckDbRepository {
             updated_at: parse_timestamp(&updated_str),
             // Balance from latest balance snapshot (column 11)
             balance: row.get::<_, Option<f64>>(11).ok().flatten().map(|f| Decimal::try_from(f).unwrap_or_default()),
+            // Manual flag (column 13)
+            is_manual: row.get::<_, Option<bool>>(13).ok().flatten().unwrap_or(false),
+            // SimpleFIN fields (columns 14-23)
+            sf_id: row.get(14).ok(),
+            sf_name: row.get(15).ok(),
+            sf_currency: row.get(16).ok(),
+            sf_balance: row.get(17).ok(),
+            sf_available_balance: row.get(18).ok(),
+            sf_balance_date: row.get(19).ok(),
+            sf_org_name: row.get(20).ok(),
+            sf_org_url: row.get(21).ok(),
+            sf_org_domain: row.get(22).ok(),
+            sf_extra: sf_extra_json.and_then(|s| serde_json::from_str(&s).ok()),
+            // Lunchflow fields (columns 24-30)
+            lf_id: row.get(24).ok(),
+            lf_name: row.get(25).ok(),
+            lf_institution_name: row.get(26).ok(),
+            lf_institution_logo: row.get(27).ok(),
+            lf_provider: row.get(28).ok(),
+            lf_currency: row.get(29).ok(),
+            lf_status: row.get(30).ok(),
         }
     }
 
     pub fn upsert_account(&self, account: &Account) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let external_ids = serde_json::to_string(&account.external_ids)?;
+        // Write empty JSON for external_ids - kept for backwards compat with DB schema
+        let external_ids = "{}";
+        let sf_extra = account.sf_extra.as_ref().map(|v| v.to_string());
 
         // Use COALESCE to preserve user-edited values like Python CLI does
         // Note: balance is stored in balance_snapshots, not in accounts table (matching Python schema)
@@ -227,8 +266,12 @@ impl DuckDbRepository {
         conn.execute(
             "INSERT INTO sys_accounts (account_id, name, nickname, account_type, classification, currency,
                                        external_ids, institution_name, institution_url, institution_domain,
-                                       created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                       created_at, updated_at, is_manual,
+                                       sf_id, sf_name, sf_currency, sf_balance, sf_available_balance,
+                                       sf_balance_date, sf_org_name, sf_org_url, sf_org_domain, sf_extra,
+                                       lf_id, lf_name, lf_institution_name, lf_institution_logo,
+                                       lf_provider, lf_currency, lf_status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (account_id) DO UPDATE SET
                 name = EXCLUDED.name,
                 nickname = COALESCE(sys_accounts.nickname, EXCLUDED.nickname),
@@ -239,7 +282,25 @@ impl DuckDbRepository {
                 institution_name = COALESCE(EXCLUDED.institution_name, sys_accounts.institution_name),
                 institution_url = COALESCE(EXCLUDED.institution_url, sys_accounts.institution_url),
                 institution_domain = COALESCE(EXCLUDED.institution_domain, sys_accounts.institution_domain),
-                updated_at = EXCLUDED.updated_at",
+                updated_at = EXCLUDED.updated_at,
+                is_manual = COALESCE(sys_accounts.is_manual, EXCLUDED.is_manual),
+                sf_id = COALESCE(EXCLUDED.sf_id, sys_accounts.sf_id),
+                sf_name = COALESCE(EXCLUDED.sf_name, sys_accounts.sf_name),
+                sf_currency = COALESCE(EXCLUDED.sf_currency, sys_accounts.sf_currency),
+                sf_balance = COALESCE(EXCLUDED.sf_balance, sys_accounts.sf_balance),
+                sf_available_balance = COALESCE(EXCLUDED.sf_available_balance, sys_accounts.sf_available_balance),
+                sf_balance_date = COALESCE(EXCLUDED.sf_balance_date, sys_accounts.sf_balance_date),
+                sf_org_name = COALESCE(EXCLUDED.sf_org_name, sys_accounts.sf_org_name),
+                sf_org_url = COALESCE(EXCLUDED.sf_org_url, sys_accounts.sf_org_url),
+                sf_org_domain = COALESCE(EXCLUDED.sf_org_domain, sys_accounts.sf_org_domain),
+                sf_extra = COALESCE(EXCLUDED.sf_extra, sys_accounts.sf_extra),
+                lf_id = COALESCE(EXCLUDED.lf_id, sys_accounts.lf_id),
+                lf_name = COALESCE(EXCLUDED.lf_name, sys_accounts.lf_name),
+                lf_institution_name = COALESCE(EXCLUDED.lf_institution_name, sys_accounts.lf_institution_name),
+                lf_institution_logo = COALESCE(EXCLUDED.lf_institution_logo, sys_accounts.lf_institution_logo),
+                lf_provider = COALESCE(EXCLUDED.lf_provider, sys_accounts.lf_provider),
+                lf_currency = COALESCE(EXCLUDED.lf_currency, sys_accounts.lf_currency),
+                lf_status = COALESCE(EXCLUDED.lf_status, sys_accounts.lf_status)",
             params![
                 account.id.to_string(),
                 account.name,
@@ -253,6 +314,24 @@ impl DuckDbRepository {
                 account.institution_domain,
                 account.created_at.to_rfc3339(),
                 account.updated_at.to_rfc3339(),
+                account.is_manual,
+                account.sf_id,
+                account.sf_name,
+                account.sf_currency,
+                account.sf_balance,
+                account.sf_available_balance,
+                account.sf_balance_date,
+                account.sf_org_name,
+                account.sf_org_url,
+                account.sf_org_domain,
+                sf_extra,
+                account.lf_id,
+                account.lf_name,
+                account.lf_institution_name,
+                account.lf_institution_logo,
+                account.lf_provider,
+                account.lf_currency,
+                account.lf_status,
             ],
         )?;
 
@@ -299,7 +378,9 @@ impl DuckDbRepository {
         let mut stmt = conn.prepare(
             "SELECT transaction_id, account_id, amount, description, transaction_date::VARCHAR,
                     posted_date::VARCHAR, tags, external_ids, deleted_at, parent_transaction_id,
-                    created_at, updated_at
+                    created_at, updated_at, csv_fingerprint, csv_batch_id, is_manual,
+                    sf_id, sf_posted, sf_amount, sf_description, sf_transacted_at, sf_pending, sf_extra,
+                    lf_id, lf_account_id, lf_amount, lf_currency, lf_date::VARCHAR, lf_merchant, lf_description, lf_is_pending
              FROM sys_transactions
              WHERE deleted_at IS NULL"
         )?;
@@ -317,7 +398,9 @@ impl DuckDbRepository {
         let mut stmt = conn.prepare(
             "SELECT transaction_id, account_id, amount, description, transaction_date::VARCHAR,
                     posted_date::VARCHAR, tags, external_ids, deleted_at, parent_transaction_id,
-                    created_at, updated_at
+                    created_at, updated_at, csv_fingerprint, csv_batch_id, is_manual,
+                    sf_id, sf_posted, sf_amount, sf_description, sf_transacted_at, sf_pending, sf_extra,
+                    lf_id, lf_account_id, lf_amount, lf_currency, lf_date::VARCHAR, lf_merchant, lf_description, lf_is_pending
              FROM sys_transactions
              WHERE account_id = ? AND deleted_at IS NULL
              ORDER BY transaction_date DESC"
@@ -379,6 +462,12 @@ impl DuckDbRepository {
     }
 
     fn row_to_transaction(&self, row: &duckdb::Row) -> Transaction {
+        // Column indices from SELECT:
+        // 0: transaction_id, 1: account_id, 2: amount, 3: description, 4: transaction_date,
+        // 5: posted_date, 6: tags, 7: external_ids, 8: deleted_at, 9: parent_transaction_id,
+        // 10: created_at, 11: updated_at, 12: csv_fingerprint, 13: csv_batch_id, 14: is_manual,
+        // 15: sf_id, 16: sf_posted, 17: sf_amount, 18: sf_description, 19: sf_transacted_at, 20: sf_pending, 21: sf_extra,
+        // 22: lf_id, 23: lf_account_id, 24: lf_amount, 25: lf_currency, 26: lf_date, 27: lf_merchant, 28: lf_description, 29: lf_is_pending
         let id_str: String = row.get(0).unwrap_or_default();
         let account_id_str: String = row.get(1).unwrap_or_default();
         let amount: f64 = row.get(2).unwrap_or(0.0);
@@ -390,10 +479,12 @@ impl DuckDbRepository {
         let tags_str: String = row.get(6).unwrap_or_else(|_| "[]".to_string());
         let tags = parse_duckdb_array(&tags_str);
 
-        let external_ids_json: String = row.get(7).unwrap_or_else(|_| "{}".to_string());
+        // Note: column 7 (external_ids) is in the query but not used - kept for backwards compat
         let parent_id_str: Option<String> = row.get(9).ok();
         let created_str: String = row.get(10).unwrap_or_default();
         let updated_str: String = row.get(11).unwrap_or_default();
+        let sf_extra_json: Option<String> = row.get(21).ok();
+        let lf_date_str: Option<String> = row.get(26).ok();
 
         Transaction {
             id: Uuid::parse_str(&id_str).unwrap_or_else(|_| Uuid::new_v4()),
@@ -403,17 +494,40 @@ impl DuckDbRepository {
             transaction_date: parse_date(&tx_date_str),
             posted_date: parse_date(&posted_date_str),
             tags,
-            external_ids: serde_json::from_str(&external_ids_json).unwrap_or_default(),
             deleted_at: None,
             parent_transaction_id: parent_id_str.and_then(|s| Uuid::parse_str(&s).ok()),
             created_at: parse_timestamp(&created_str),
             updated_at: parse_timestamp(&updated_str),
+            // CSV Import tracking (columns 12-13)
+            csv_fingerprint: row.get(12).ok(),
+            csv_batch_id: row.get(13).ok(),
+            // Manual flag (column 14)
+            is_manual: row.get::<_, Option<bool>>(14).ok().flatten().unwrap_or(false),
+            // SimpleFIN fields (columns 15-21)
+            sf_id: row.get(15).ok(),
+            sf_posted: row.get(16).ok(),
+            sf_amount: row.get(17).ok(),
+            sf_description: row.get(18).ok(),
+            sf_transacted_at: row.get(19).ok(),
+            sf_pending: row.get(20).ok(),
+            sf_extra: sf_extra_json.and_then(|s| serde_json::from_str(&s).ok()),
+            // Lunchflow fields (columns 22-29)
+            lf_id: row.get(22).ok(),
+            lf_account_id: row.get(23).ok(),
+            lf_amount: row.get::<_, Option<f64>>(24).ok().flatten().map(|f| Decimal::try_from(f).unwrap_or_default()),
+            lf_currency: row.get(25).ok(),
+            lf_date: lf_date_str.map(|s| parse_date(&s)),
+            lf_merchant: row.get(27).ok(),
+            lf_description: row.get(28).ok(),
+            lf_is_pending: row.get(29).ok(),
         }
     }
 
     pub fn upsert_transaction(&self, tx: &Transaction) -> Result<()> {
         let conn = self.conn.lock().unwrap();
-        let external_ids = serde_json::to_string(&tx.external_ids)?;
+        // Write empty JSON for external_ids - kept for backwards compat with DB schema
+        let external_ids = "{}";
+        let sf_extra = tx.sf_extra.as_ref().map(|v| v.to_string());
 
         // Build tags array literal for DuckDB: ['tag1', 'tag2']
         let tags_literal = format_tags_array(&tx.tags);
@@ -422,8 +536,11 @@ impl DuckDbRepository {
         let sql = format!(
             "INSERT INTO sys_transactions (transaction_id, account_id, amount, description,
                                            transaction_date, posted_date, tags, external_ids,
-                                           parent_transaction_id, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, {}, ?, ?, ?, ?)
+                                           parent_transaction_id, created_at, updated_at,
+                                           csv_fingerprint, csv_batch_id, is_manual,
+                                           sf_id, sf_posted, sf_amount, sf_description, sf_transacted_at, sf_pending, sf_extra,
+                                           lf_id, lf_account_id, lf_amount, lf_currency, lf_date, lf_merchant, lf_description, lf_is_pending)
+             VALUES (?, ?, ?, ?, ?, ?, {}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (transaction_id) DO UPDATE SET
                 account_id = EXCLUDED.account_id,
                 amount = EXCLUDED.amount,
@@ -433,7 +550,25 @@ impl DuckDbRepository {
                 tags = EXCLUDED.tags,
                 external_ids = EXCLUDED.external_ids,
                 parent_transaction_id = EXCLUDED.parent_transaction_id,
-                updated_at = EXCLUDED.updated_at",
+                updated_at = EXCLUDED.updated_at,
+                csv_fingerprint = COALESCE(EXCLUDED.csv_fingerprint, sys_transactions.csv_fingerprint),
+                csv_batch_id = COALESCE(EXCLUDED.csv_batch_id, sys_transactions.csv_batch_id),
+                is_manual = COALESCE(sys_transactions.is_manual, EXCLUDED.is_manual),
+                sf_id = COALESCE(EXCLUDED.sf_id, sys_transactions.sf_id),
+                sf_posted = COALESCE(EXCLUDED.sf_posted, sys_transactions.sf_posted),
+                sf_amount = COALESCE(EXCLUDED.sf_amount, sys_transactions.sf_amount),
+                sf_description = COALESCE(EXCLUDED.sf_description, sys_transactions.sf_description),
+                sf_transacted_at = COALESCE(EXCLUDED.sf_transacted_at, sys_transactions.sf_transacted_at),
+                sf_pending = COALESCE(EXCLUDED.sf_pending, sys_transactions.sf_pending),
+                sf_extra = COALESCE(EXCLUDED.sf_extra, sys_transactions.sf_extra),
+                lf_id = COALESCE(EXCLUDED.lf_id, sys_transactions.lf_id),
+                lf_account_id = COALESCE(EXCLUDED.lf_account_id, sys_transactions.lf_account_id),
+                lf_amount = COALESCE(EXCLUDED.lf_amount, sys_transactions.lf_amount),
+                lf_currency = COALESCE(EXCLUDED.lf_currency, sys_transactions.lf_currency),
+                lf_date = COALESCE(EXCLUDED.lf_date, sys_transactions.lf_date),
+                lf_merchant = COALESCE(EXCLUDED.lf_merchant, sys_transactions.lf_merchant),
+                lf_description = COALESCE(EXCLUDED.lf_description, sys_transactions.lf_description),
+                lf_is_pending = COALESCE(EXCLUDED.lf_is_pending, sys_transactions.lf_is_pending)",
             tags_literal
         );
 
@@ -450,6 +585,24 @@ impl DuckDbRepository {
                 tx.parent_transaction_id.map(|id| id.to_string()),
                 tx.created_at.to_rfc3339(),
                 tx.updated_at.to_rfc3339(),
+                tx.csv_fingerprint,
+                tx.csv_batch_id,
+                tx.is_manual,
+                tx.sf_id,
+                tx.sf_posted,
+                tx.sf_amount,
+                tx.sf_description,
+                tx.sf_transacted_at,
+                tx.sf_pending,
+                sf_extra,
+                tx.lf_id,
+                tx.lf_account_id,
+                tx.lf_amount.map(|d| d.to_string().parse::<f64>().unwrap_or(0.0)),
+                tx.lf_currency,
+                tx.lf_date.map(|d| d.to_string()),
+                tx.lf_merchant,
+                tx.lf_description,
+                tx.lf_is_pending,
             ],
         )?;
 
@@ -471,15 +624,20 @@ impl DuckDbRepository {
     /// Returns true if inserted, false if skipped
     pub fn insert_transaction_if_not_exists(&self, tx: &Transaction) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
-        let external_ids = serde_json::to_string(&tx.external_ids)?;
+        // Write empty JSON for external_ids - kept for backwards compat with DB schema
+        let external_ids = "{}";
+        let sf_extra = tx.sf_extra.as_ref().map(|v| v.to_string());
         let tags_literal = format_tags_array(&tx.tags);
 
         // Use INSERT ... ON CONFLICT DO NOTHING to skip existing transactions
         let sql = format!(
             "INSERT INTO sys_transactions (transaction_id, account_id, amount, description,
                                            transaction_date, posted_date, tags, external_ids,
-                                           parent_transaction_id, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, {}, ?, ?, ?, ?)
+                                           parent_transaction_id, created_at, updated_at,
+                                           csv_fingerprint, csv_batch_id, is_manual,
+                                           sf_id, sf_posted, sf_amount, sf_description, sf_transacted_at, sf_pending, sf_extra,
+                                           lf_id, lf_account_id, lf_amount, lf_currency, lf_date, lf_merchant, lf_description, lf_is_pending)
+             VALUES (?, ?, ?, ?, ?, ?, {}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (transaction_id) DO NOTHING",
             tags_literal
         );
@@ -497,6 +655,24 @@ impl DuckDbRepository {
                 tx.parent_transaction_id.map(|id| id.to_string()),
                 tx.created_at.to_rfc3339(),
                 tx.updated_at.to_rfc3339(),
+                tx.csv_fingerprint,
+                tx.csv_batch_id,
+                tx.is_manual,
+                tx.sf_id,
+                tx.sf_posted,
+                tx.sf_amount,
+                tx.sf_description,
+                tx.sf_transacted_at,
+                tx.sf_pending,
+                sf_extra,
+                tx.lf_id,
+                tx.lf_account_id,
+                tx.lf_amount.map(|d| d.to_string().parse::<f64>().unwrap_or(0.0)),
+                tx.lf_currency,
+                tx.lf_date.map(|d| d.to_string()),
+                tx.lf_merchant,
+                tx.lf_description,
+                tx.lf_is_pending,
             ],
         )?;
 
@@ -514,13 +690,35 @@ impl DuckDbRepository {
         Ok(count > 0)
     }
 
-    /// Check if a transaction exists by external ID for a given integration
-    pub fn transaction_exists_by_external_id(&self, integration: &str, external_id: &str) -> Result<bool> {
+    /// Check if a transaction exists by SimpleFIN ID (indexed, fast)
+    pub fn transaction_exists_by_sf_id(&self, sf_id: &str) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
-        // Use DuckDB's JSON extraction to check if the external ID matches
         let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM sys_transactions WHERE json_extract_string(external_ids, ?) = ?",
-            params![format!("$.{}", integration), external_id],
+            "SELECT COUNT(*) FROM sys_transactions WHERE sf_id = ?",
+            params![sf_id],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    /// Check if a transaction exists by Lunchflow ID (indexed, fast)
+    pub fn transaction_exists_by_lf_id(&self, lf_id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM sys_transactions WHERE lf_id = ?",
+            params![lf_id],
+            |row| row.get(0),
+        )?;
+        Ok(count > 0)
+    }
+
+    /// Check if a CSV fingerprint exists in batches other than the current one
+    /// This allows duplicate transactions within a single import batch but prevents re-import
+    pub fn csv_fingerprint_exists_in_other_batches(&self, fingerprint: &str, current_batch_id: &str) -> Result<bool> {
+        let conn = self.conn.lock().unwrap();
+        let count: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM sys_transactions WHERE csv_fingerprint = ? AND (csv_batch_id IS NULL OR csv_batch_id != ?)",
+            params![fingerprint, current_batch_id],
             |row| row.get(0),
         )?;
         Ok(count > 0)
@@ -531,7 +729,9 @@ impl DuckDbRepository {
         let mut stmt = conn.prepare(
             "SELECT transaction_id, account_id, amount, description, transaction_date::VARCHAR,
                     posted_date::VARCHAR, tags, external_ids, deleted_at, parent_transaction_id,
-                    created_at, updated_at
+                    created_at, updated_at, csv_fingerprint, csv_batch_id, is_manual,
+                    sf_id, sf_posted, sf_amount, sf_description, sf_transacted_at, sf_pending, sf_extra,
+                    lf_id, lf_account_id, lf_amount, lf_currency, lf_date::VARCHAR, lf_merchant, lf_description, lf_is_pending
              FROM sys_transactions WHERE transaction_id = ?"
         )?;
 
@@ -1229,22 +1429,6 @@ impl DuckDbRepository {
             .collect();
 
         Ok(orphans)
-    }
-
-    pub fn check_duplicate_fingerprints(&self) -> Result<Vec<(String, i64)>> {
-        let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT json_extract_string(external_ids, '$.fingerprint') as fp, COUNT(*) as cnt
-             FROM sys_transactions
-             WHERE deleted_at IS NULL AND json_extract_string(external_ids, '$.fingerprint') IS NOT NULL
-             GROUP BY fp HAVING COUNT(*) > 1"
-        )?;
-
-        let duplicates: Vec<(String, i64)> = stmt.query_map([], |row| {
-            Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
-        })?.filter_map(|r| r.ok()).collect();
-
-        Ok(duplicates)
     }
 
     pub fn check_future_transactions(&self) -> Result<i64> {
