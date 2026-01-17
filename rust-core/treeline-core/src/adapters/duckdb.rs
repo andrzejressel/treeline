@@ -375,9 +375,12 @@ impl DuckDbRepository {
 
     pub fn get_transactions(&self) -> Result<Vec<Transaction>> {
         let conn = self.conn.lock().unwrap();
+        // Note: CAST(tags AS VARCHAR) is required because duckdb-rs cannot read VARCHAR[]
+        // directly as String. Without the CAST, row.get() silently fails and returns "[]".
+        // See parse_duckdb_array() for the parsing logic.
         let mut stmt = conn.prepare(
             "SELECT transaction_id, account_id, amount, description, transaction_date::VARCHAR,
-                    posted_date::VARCHAR, tags, external_ids, deleted_at, parent_transaction_id,
+                    posted_date::VARCHAR, CAST(tags AS VARCHAR) as tags, external_ids, deleted_at, parent_transaction_id,
                     created_at, updated_at, csv_fingerprint, csv_batch_id, is_manual,
                     sf_id, sf_posted, sf_amount, sf_description, sf_transacted_at, sf_pending, sf_extra,
                     lf_id, lf_account_id, lf_amount, lf_currency, lf_date::VARCHAR, lf_merchant, lf_description, lf_is_pending
@@ -395,9 +398,10 @@ impl DuckDbRepository {
     /// Get transactions for a specific account, ordered by transaction_date DESC
     pub fn get_transactions_by_account(&self, account_id: &str) -> Result<Vec<Transaction>> {
         let conn = self.conn.lock().unwrap();
+        // CAST(tags AS VARCHAR) required - see get_transactions() for explanation
         let mut stmt = conn.prepare(
             "SELECT transaction_id, account_id, amount, description, transaction_date::VARCHAR,
-                    posted_date::VARCHAR, tags, external_ids, deleted_at, parent_transaction_id,
+                    posted_date::VARCHAR, CAST(tags AS VARCHAR) as tags, external_ids, deleted_at, parent_transaction_id,
                     created_at, updated_at, csv_fingerprint, csv_batch_id, is_manual,
                     sf_id, sf_posted, sf_amount, sf_description, sf_transacted_at, sf_pending, sf_extra,
                     lf_id, lf_account_id, lf_amount, lf_currency, lf_date::VARCHAR, lf_merchant, lf_description, lf_is_pending
@@ -726,9 +730,10 @@ impl DuckDbRepository {
 
     pub fn get_transaction_by_id(&self, id: &str) -> Result<Option<Transaction>> {
         let conn = self.conn.lock().unwrap();
+        // CAST(tags AS VARCHAR) required - see get_transactions() for explanation
         let mut stmt = conn.prepare(
             "SELECT transaction_id, account_id, amount, description, transaction_date::VARCHAR,
-                    posted_date::VARCHAR, tags, external_ids, deleted_at, parent_transaction_id,
+                    posted_date::VARCHAR, CAST(tags AS VARCHAR) as tags, external_ids, deleted_at, parent_transaction_id,
                     created_at, updated_at, csv_fingerprint, csv_batch_id, is_manual,
                     sf_id, sf_posted, sf_amount, sf_description, sf_transacted_at, sf_pending, sf_extra,
                     lf_id, lf_account_id, lf_amount, lf_currency, lf_date::VARCHAR, lf_merchant, lf_description, lf_is_pending
@@ -1521,8 +1526,11 @@ impl DuckDbRepository {
     /// Get all enabled auto-tag rules, ordered by sort_order
     pub fn get_enabled_auto_tag_rules(&self) -> Result<Vec<AutoTagRule>> {
         let conn = self.conn.lock().unwrap();
+        // CAST(tags AS VARCHAR) is critical here - without it, duckdb-rs silently fails
+        // to read VARCHAR[] as String, returning "[]" and causing rules to have no tags.
+        // This was the root cause of auto-tag rules not applying. See parse_duckdb_array().
         let mut stmt = conn.prepare(
-            "SELECT rule_id, name, sql_condition, tags, enabled, sort_order
+            "SELECT rule_id, name, sql_condition, CAST(tags AS VARCHAR) as tags_str, enabled, sort_order
              FROM sys_transactions_rules
              WHERE enabled = true
              ORDER BY sort_order, created_at"
@@ -1933,5 +1941,73 @@ mod tests {
 
         // Should contain line/column info
         assert!(err.contains("Line:") || err.contains("line"), "Error was: {}", err);
+    }
+
+    // ==================== parse_duckdb_array Tests ====================
+    // These tests ensure VARCHAR[] arrays are correctly parsed from DuckDB string format.
+    // This is critical for auto-tag rules where tags are stored as VARCHAR[].
+
+    #[test]
+    fn test_parse_duckdb_array_empty() {
+        assert_eq!(parse_duckdb_array("[]"), Vec::<String>::new());
+        assert_eq!(parse_duckdb_array(""), Vec::<String>::new());
+        assert_eq!(parse_duckdb_array("NULL"), Vec::<String>::new());
+    }
+
+    #[test]
+    fn test_parse_duckdb_array_single_element() {
+        assert_eq!(parse_duckdb_array("[groceries]"), vec!["groceries"]);
+        assert_eq!(parse_duckdb_array("[test-tag]"), vec!["test-tag"]);
+    }
+
+    #[test]
+    fn test_parse_duckdb_array_multiple_elements() {
+        assert_eq!(
+            parse_duckdb_array("[groceries, food, essentials]"),
+            vec!["groceries", "food", "essentials"]
+        );
+    }
+
+    #[test]
+    fn test_parse_duckdb_array_with_single_quotes() {
+        // DuckDB sometimes returns arrays with single-quoted strings
+        assert_eq!(parse_duckdb_array("['groceries']"), vec!["groceries"]);
+        assert_eq!(
+            parse_duckdb_array("['groceries', 'food']"),
+            vec!["groceries", "food"]
+        );
+    }
+
+    #[test]
+    fn test_parse_duckdb_array_with_double_quotes() {
+        assert_eq!(parse_duckdb_array("[\"groceries\"]"), vec!["groceries"]);
+        assert_eq!(
+            parse_duckdb_array("[\"groceries\", \"food\"]"),
+            vec!["groceries", "food"]
+        );
+    }
+
+    #[test]
+    fn test_parse_duckdb_array_with_whitespace() {
+        assert_eq!(parse_duckdb_array("  [groceries]  "), vec!["groceries"]);
+        assert_eq!(
+            parse_duckdb_array("[  groceries  ,  food  ]"),
+            vec!["groceries", "food"]
+        );
+    }
+
+    #[test]
+    fn test_parse_duckdb_array_preserves_hyphens_and_special_chars() {
+        // Tags can contain hyphens and other characters
+        assert_eq!(
+            parse_duckdb_array("[test-auto-tag, my_tag, tag123]"),
+            vec!["test-auto-tag", "my_tag", "tag123"]
+        );
+    }
+
+    #[test]
+    fn test_parse_duckdb_array_filters_empty_elements() {
+        // Empty elements should be filtered out
+        assert_eq!(parse_duckdb_array("[groceries, , food]"), vec!["groceries", "food"]);
     }
 }

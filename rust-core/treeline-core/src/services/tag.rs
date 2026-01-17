@@ -34,6 +34,7 @@ impl TagService {
 
         // Get all enabled rules
         let rules = self.repository.get_enabled_auto_tag_rules()?;
+
         if rules.is_empty() {
             return Ok(AutoTagResult {
                 rules_evaluated: 0,
@@ -55,9 +56,8 @@ impl TagService {
             // Find which transactions match this rule's condition
             let matching_tx_ids = match self.repository.get_transactions_matching_rule(tx_ids, &rule.sql_condition) {
                 Ok(ids) => ids,
-                Err(_e) => {
+                Err(_) => {
                     // Rule condition failed (invalid SQL?) - skip this rule and continue
-                    // eprintln!("Auto-tag rule '{}' failed: {}. Skipping.", rule.name, _e);
                     continue;
                 }
             };
