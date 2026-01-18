@@ -6,7 +6,7 @@ use std::sync::Mutex;
 
 use fs2::FileExt;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use duckdb::{params, Connection};
 use rust_decimal::Decimal;
@@ -1774,6 +1774,11 @@ impl DuckDbRepository {
             }
         }
         Ok(result)
+    }
+    
+    pub fn use_connection<T>(&self, func: impl FnOnce(&mut Connection) -> Result<T>) -> Result<T> {
+        let mut conn = self.conn.lock().unwrap();
+        func(&mut conn)
     }
 }
 
