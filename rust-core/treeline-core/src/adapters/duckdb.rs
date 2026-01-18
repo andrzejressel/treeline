@@ -344,6 +344,10 @@ impl DuckDbRepository {
     /// 1. Delete all transactions for the account
     /// 2. Delete all balance snapshots for the account
     /// 3. Delete the account itself
+    ///
+    /// Note: We intentionally don't wrap this in an explicit transaction because
+    /// DuckDB has issues with FK constraint checking inside transactions.
+    /// Each statement auto-commits, and the delete order ensures FK constraints are satisfied.
     pub fn delete_account(&self, account_id: &str) -> Result<()> {
         let conn = self.conn.lock().unwrap();
 
