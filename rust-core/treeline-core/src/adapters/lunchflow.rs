@@ -159,7 +159,7 @@ pub struct SyncedTransactions {
 // =============================================================================
 
 /// Default production API URL
-const LUNCHFLOW_PRODUCTION_URL: &str = "https://lunchflow.com/api/v1";
+const LUNCHFLOW_PRODUCTION_URL: &str = "https://www.lunchflow.app/api/v1";
 
 /// Environment variable to override the Lunchflow API base URL.
 /// Set this to use a staging/sandbox environment for testing.
@@ -439,9 +439,20 @@ impl LunchflowClient {
             .unwrap_or_else(|_| Utc::now().naive_utc().date());
 
         // Map lf_description to core description (full transaction description)
-        // Falls back to lf_merchant if no description provided
+        // Falls back to lf_merchant if description is missing or empty
         // Both raw fields are stored for power users
-        let description = lf_tx.description.clone().or_else(|| lf_tx.merchant.clone());
+        let description = lf_tx
+            .description
+            .as_ref()
+            .filter(|d| !d.trim().is_empty())
+            .cloned()
+            .or_else(|| {
+                lf_tx
+                    .merchant
+                    .as_ref()
+                    .filter(|m| !m.trim().is_empty())
+                    .cloned()
+            });
 
         let now = Utc::now();
         Transaction {
@@ -763,6 +774,49 @@ mod tests {
     }
 
     #[test]
+    fn test_transaction_mapping_empty_description() {
+        let lf_tx = LunchflowTransaction {
+            id: "tx_empty".to_string(),
+            account_id: None,
+            date: "2025-01-15".to_string(),
+            amount: Decimal::new(-1500, 2),
+            currency: "USD".to_string(),
+            merchant: Some("Grocery Store".to_string()),
+            description: Some("".to_string()), // Empty string, not None
+            is_pending: false,
+        };
+
+        let client = LunchflowClient::new_with_base_url("test_key", "http://localhost").unwrap();
+        let tx = client.map_transaction(&lf_tx);
+
+        // Falls back to lf_merchant when description is empty
+        assert_eq!(tx.description, Some("Grocery Store".to_string()));
+        assert_eq!(tx.lf_merchant, Some("Grocery Store".to_string()));
+        assert_eq!(tx.lf_description, Some("".to_string()));
+    }
+
+    #[test]
+    fn test_transaction_mapping_whitespace_description() {
+        let lf_tx = LunchflowTransaction {
+            id: "tx_whitespace".to_string(),
+            account_id: None,
+            date: "2025-01-15".to_string(),
+            amount: Decimal::new(-2000, 2),
+            currency: "USD".to_string(),
+            merchant: Some("Gas Station".to_string()),
+            description: Some("   ".to_string()), // Whitespace only
+            is_pending: false,
+        };
+
+        let client = LunchflowClient::new_with_base_url("test_key", "http://localhost").unwrap();
+        let tx = client.map_transaction(&lf_tx);
+
+        // Falls back to lf_merchant when description is whitespace-only
+        assert_eq!(tx.description, Some("Gas Station".to_string()));
+        assert_eq!(tx.lf_merchant, Some("Gas Station".to_string()));
+    }
+
+    #[test]
     fn test_provider_setup_missing_api_key() {
         let provider = LunchflowProvider::new();
         let result = provider.setup(&serde_json::json!({}));
@@ -774,7 +828,7 @@ mod tests {
         // When LUNCHFLOW_BASE_URL env var is not set, should use production
         std::env::remove_var("LUNCHFLOW_BASE_URL");
         let url = get_base_url();
-        assert_eq!(url, "https://lunchflow.com/api/v1");
+        assert_eq!(url, "https://www.lunchflow.app/api/v1");
     }
 
     #[test]
