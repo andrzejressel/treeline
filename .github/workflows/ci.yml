@@ -15,6 +15,12 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Cache Rust dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "rust-core -> target"
+          shared-key: "ci-rust"
+
       - name: Run Rust tests
         working-directory: rust-core
         run: cargo test
