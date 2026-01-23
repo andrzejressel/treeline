@@ -26,7 +26,10 @@ pub struct BackupService {
 
 impl BackupService {
     pub fn new(treeline_dir: PathBuf, db_filename: String) -> Self {
-        Self { treeline_dir, db_filename }
+        Self {
+            treeline_dir,
+            db_filename,
+        }
     }
 
     fn backups_dir(&self) -> PathBuf {
@@ -53,11 +56,10 @@ impl BackupService {
         let backup_path = backups_dir.join(&backup_name);
 
         // Create ZIP archive
-        let file = File::create(&backup_path)
-            .context("Failed to create backup file")?;
+        let file = File::create(&backup_path).context("Failed to create backup file")?;
         let mut zip = ZipWriter::new(file);
-        let options = SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Deflated);
+        let options =
+            SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
         // Add database file
         zip.start_file(&self.db_filename, options)?;
@@ -113,7 +115,8 @@ impl BackupService {
                 continue;
             }
 
-            let name = path.file_name()
+            let name = path
+                .file_name()
                 .and_then(|n| n.to_str())
                 .unwrap_or("")
                 .to_string();
@@ -171,14 +174,15 @@ impl BackupService {
             let now = Utc::now();
             let timestamp = now.format("%Y-%m-%dT%H-%M-%S");
             let micros = now.timestamp_subsec_micros();
-            let pre_restore_backup = format!("treeline-pre-restore-{}-{:06}.zip", timestamp, micros);
+            let pre_restore_backup =
+                format!("treeline-pre-restore-{}-{:06}.zip", timestamp, micros);
             let pre_restore_path = self.backups_dir().join(&pre_restore_backup);
 
             // Create a quick backup of just the DB
             let file = File::create(&pre_restore_path)?;
             let mut zip = ZipWriter::new(file);
-            let options = SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Deflated);
+            let options =
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Deflated);
 
             zip.start_file(&self.db_filename, options)?;
             let mut db_file = File::open(&db_path)?;
@@ -195,7 +199,8 @@ impl BackupService {
             let mut archive = ZipArchive::new(file)?;
 
             // Track which config files are in the backup
-            let mut restored_configs: std::collections::HashSet<String> = std::collections::HashSet::new();
+            let mut restored_configs: std::collections::HashSet<String> =
+                std::collections::HashSet::new();
 
             for i in 0..archive.len() {
                 let mut file = archive.by_index(i)?;
@@ -232,8 +237,7 @@ impl BackupService {
             if enc_path.exists() {
                 fs::remove_file(&enc_path)?;
             }
-            fs::copy(&backup_path, &db_path)
-                .context("Failed to restore backup")?;
+            fs::copy(&backup_path, &db_path).context("Failed to restore backup")?;
         }
 
         Ok(())

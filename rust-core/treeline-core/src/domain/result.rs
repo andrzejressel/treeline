@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
 /// COMMENT: these error types are new compared to
-/// the old Python CLI code. Explain why you added these, 
+/// the old Python CLI code. Explain why you added these,
 /// I think they are unnecessary but I'm open to it.
 /// Core library error type
 #[derive(Error, Debug)]

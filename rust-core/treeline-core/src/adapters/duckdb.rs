@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
-use duckdb::{Connection, params};
+use duckdb::{params, Connection};
 use rust_decimal::Decimal;
 use sqlparser::dialect::DuckDbDialect;
 use sqlparser::parser::Parser;
@@ -20,14 +20,13 @@ use crate::services::MigrationService;
 /// This prevents crashes from malformed SQL reaching the database engine.
 fn validate_sql_syntax(sql: &str) -> Result<()> {
     let dialect = DuckDbDialect {};
-    Parser::parse_sql(&dialect, sql)
-        .map_err(|e| {
-            // Clean up the error message - remove redundant prefix
-            // Tauri will add "Failed to execute query:" wrapper
-            let msg = e.to_string();
-            let cleaned = msg.trim_start_matches("sql parser error: ");
-            anyhow!("{}", cleaned)
-        })?;
+    Parser::parse_sql(&dialect, sql).map_err(|e| {
+        // Clean up the error message - remove redundant prefix
+        // Tauri will add "Failed to execute query:" wrapper
+        let msg = e.to_string();
+        let cleaned = msg.trim_start_matches("sql parser error: ");
+        anyhow!("{}", cleaned)
+    })?;
     Ok(())
 }
 
@@ -81,7 +80,8 @@ impl DuckDbRepository {
                     let err_msg = e.to_string();
                     if is_retryable_error(&err_msg) && attempt < MAX_RETRIES - 1 {
                         // Exponential backoff: 50ms, 100ms, 200ms, 400ms
-                        let delay = Duration::from_millis(INITIAL_RETRY_DELAY_MS * 2u64.pow(attempt));
+                        let delay =
+                            Duration::from_millis(INITIAL_RETRY_DELAY_MS * 2u64.pow(attempt));
                         eprintln!(
                             "[treeline] Database busy, retrying in {}ms (attempt {}/{}): {}",
                             delay.as_millis(),
@@ -100,7 +100,8 @@ impl DuckDbRepository {
         }
 
         // Should only reach here if all retries failed
-        Err(last_error.unwrap_or_else(|| anyhow!("Failed to open database after {} retries", MAX_RETRIES)))
+        Err(last_error
+            .unwrap_or_else(|| anyhow!("Failed to open database after {} retries", MAX_RETRIES)))
     }
 
     /// Attempt to open a database connection (called by new() with retry logic)
@@ -109,8 +110,7 @@ impl DuckDbRepository {
         // (cached extensions in ~/.duckdb/extensions may have different Team IDs)
         let conn = if let Some(key) = encryption_key {
             // Encrypted database: open in-memory first, then ATTACH encrypted file
-            let config = duckdb::Config::default()
-                .enable_autoload_extension(false)?;
+            let config = duckdb::Config::default().enable_autoload_extension(false)?;
             let conn = Connection::open_in_memory_with_flags(config)?;
             conn.execute(
                 &format!(
@@ -123,8 +123,7 @@ impl DuckDbRepository {
             conn.execute("USE main_db", [])?;
             conn
         } else {
-            let config = duckdb::Config::default()
-                .enable_autoload_extension(false)?;
+            let config = duckdb::Config::default().enable_autoload_extension(false)?;
             Connection::open_with_flags(db_path, config)?
         };
 
@@ -167,12 +166,13 @@ impl DuckDbRepository {
                     a.sf_balance_date, a.sf_org_name, a.sf_org_url, a.sf_org_domain, a.sf_extra,
                     a.lf_id, a.lf_name, a.lf_institution_name, a.lf_institution_logo,
                     a.lf_provider, a.lf_currency, a.lf_status
-             FROM sys_accounts a"
+             FROM sys_accounts a",
         )?;
 
-        let accounts = stmt.query_map([], |row| {
-            Ok(self.row_to_account(row))
-        })?.filter_map(|r| r.ok()).collect();
+        let accounts = stmt
+            .query_map([], |row| Ok(self.row_to_account(row)))?
+            .filter_map(|r| r.ok())
+            .collect();
 
         Ok(accounts)
     }
@@ -191,12 +191,12 @@ impl DuckDbRepository {
                     a.sf_balance_date, a.sf_org_name, a.sf_org_url, a.sf_org_domain, a.sf_extra,
                     a.lf_id, a.lf_name, a.lf_institution_name, a.lf_institution_logo,
                     a.lf_provider, a.lf_currency, a.lf_status
-             FROM sys_accounts a WHERE a.account_id = ?"
+             FROM sys_accounts a WHERE a.account_id = ?",
         )?;
 
-        let account = stmt.query_row([id], |row| {
-            Ok(self.row_to_account(row))
-        }).ok();
+        let account = stmt
+            .query_row([id], |row| Ok(self.row_to_account(row)))
+            .ok();
 
         Ok(account)
     }
@@ -229,9 +229,17 @@ impl DuckDbRepository {
             created_at: parse_timestamp(&created_str),
             updated_at: parse_timestamp(&updated_str),
             // Balance from latest balance snapshot (column 11)
-            balance: row.get::<_, Option<f64>>(11).ok().flatten().map(|f| Decimal::try_from(f).unwrap_or_default()),
+            balance: row
+                .get::<_, Option<f64>>(11)
+                .ok()
+                .flatten()
+                .map(|f| Decimal::try_from(f).unwrap_or_default()),
             // Manual flag (column 13)
-            is_manual: row.get::<_, Option<bool>>(13).ok().flatten().unwrap_or(false),
+            is_manual: row
+                .get::<_, Option<bool>>(13)
+                .ok()
+                .flatten()
+                .unwrap_or(false),
             // SimpleFIN fields (columns 14-23)
             sf_id: row.get(14).ok(),
             sf_name: row.get(15).ok(),
@@ -385,16 +393,17 @@ impl DuckDbRepository {
         let mut stmt = conn.prepare(
             "SELECT transaction_id, account_id, amount, description, transaction_date::VARCHAR,
                     posted_date::VARCHAR, CAST(tags AS VARCHAR) as tags, external_ids, deleted_at, parent_transaction_id,
-                    created_at, updated_at, csv_fingerprint, csv_batch_id, is_manual,
+                    created_at, updated_at, csv_fingerprint, csv_batch_id, is_manual, tags_auto_applied,
                     sf_id, sf_posted, sf_amount, sf_description, sf_transacted_at, sf_pending, sf_extra,
                     lf_id, lf_account_id, lf_amount, lf_currency, lf_date::VARCHAR, lf_merchant, lf_description, lf_is_pending
              FROM sys_transactions
              WHERE deleted_at IS NULL"
         )?;
 
-        let transactions = stmt.query_map([], |row| {
-            Ok(self.row_to_transaction(row))
-        })?.filter_map(|r| r.ok()).collect();
+        let transactions = stmt
+            .query_map([], |row| Ok(self.row_to_transaction(row)))?
+            .filter_map(|r| r.ok())
+            .collect();
 
         Ok(transactions)
     }
@@ -406,7 +415,7 @@ impl DuckDbRepository {
         let mut stmt = conn.prepare(
             "SELECT transaction_id, account_id, amount, description, transaction_date::VARCHAR,
                     posted_date::VARCHAR, CAST(tags AS VARCHAR) as tags, external_ids, deleted_at, parent_transaction_id,
-                    created_at, updated_at, csv_fingerprint, csv_batch_id, is_manual,
+                    created_at, updated_at, csv_fingerprint, csv_batch_id, is_manual, tags_auto_applied,
                     sf_id, sf_posted, sf_amount, sf_description, sf_transacted_at, sf_pending, sf_extra,
                     lf_id, lf_account_id, lf_amount, lf_currency, lf_date::VARCHAR, lf_merchant, lf_description, lf_is_pending
              FROM sys_transactions
@@ -414,9 +423,10 @@ impl DuckDbRepository {
              ORDER BY transaction_date DESC"
         )?;
 
-        let transactions = stmt.query_map([account_id], |row| {
-            Ok(self.row_to_transaction(row))
-        })?.filter_map(|r| r.ok()).collect();
+        let transactions = stmt
+            .query_map([account_id], |row| Ok(self.row_to_transaction(row)))?
+            .filter_map(|r| r.ok())
+            .collect();
 
         Ok(transactions)
     }
@@ -444,11 +454,10 @@ impl DuckDbRepository {
 
     pub fn get_balance_snapshot_count(&self) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
-        let count: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM sys_balance_snapshots",
-            [],
-            |row| row.get(0),
-        )?;
+        let count: i64 =
+            conn.query_row("SELECT COUNT(*) FROM sys_balance_snapshots", [], |row| {
+                row.get(0)
+            })?;
         Ok(count)
     }
 
@@ -473,9 +482,9 @@ impl DuckDbRepository {
         // Column indices from SELECT:
         // 0: transaction_id, 1: account_id, 2: amount, 3: description, 4: transaction_date,
         // 5: posted_date, 6: tags, 7: external_ids, 8: deleted_at, 9: parent_transaction_id,
-        // 10: created_at, 11: updated_at, 12: csv_fingerprint, 13: csv_batch_id, 14: is_manual,
-        // 15: sf_id, 16: sf_posted, 17: sf_amount, 18: sf_description, 19: sf_transacted_at, 20: sf_pending, 21: sf_extra,
-        // 22: lf_id, 23: lf_account_id, 24: lf_amount, 25: lf_currency, 26: lf_date, 27: lf_merchant, 28: lf_description, 29: lf_is_pending
+        // 10: created_at, 11: updated_at, 12: csv_fingerprint, 13: csv_batch_id, 14: is_manual, 15: tags_auto_applied,
+        // 16: sf_id, 17: sf_posted, 18: sf_amount, 19: sf_description, 20: sf_transacted_at, 21: sf_pending, 22: sf_extra,
+        // 23: lf_id, 24: lf_account_id, 25: lf_amount, 26: lf_currency, 27: lf_date, 28: lf_merchant, 29: lf_description, 30: lf_is_pending
         let id_str: String = row.get(0).unwrap_or_default();
         let account_id_str: String = row.get(1).unwrap_or_default();
         let amount: f64 = row.get(2).unwrap_or(0.0);
@@ -491,8 +500,8 @@ impl DuckDbRepository {
         let parent_id_str: Option<String> = row.get(9).ok();
         let created_str: String = row.get(10).unwrap_or_default();
         let updated_str: String = row.get(11).unwrap_or_default();
-        let sf_extra_json: Option<String> = row.get(21).ok();
-        let lf_date_str: Option<String> = row.get(26).ok();
+        let sf_extra_json: Option<String> = row.get(22).ok();
+        let lf_date_str: Option<String> = row.get(27).ok();
 
         Transaction {
             id: Uuid::parse_str(&id_str).unwrap_or_else(|_| Uuid::new_v4()),
@@ -510,24 +519,38 @@ impl DuckDbRepository {
             csv_fingerprint: row.get(12).ok(),
             csv_batch_id: row.get(13).ok(),
             // Manual flag (column 14)
-            is_manual: row.get::<_, Option<bool>>(14).ok().flatten().unwrap_or(false),
-            // SimpleFIN fields (columns 15-21)
-            sf_id: row.get(15).ok(),
-            sf_posted: row.get(16).ok(),
-            sf_amount: row.get(17).ok(),
-            sf_description: row.get(18).ok(),
-            sf_transacted_at: row.get(19).ok(),
-            sf_pending: row.get(20).ok(),
+            is_manual: row
+                .get::<_, Option<bool>>(14)
+                .ok()
+                .flatten()
+                .unwrap_or(false),
+            // Auto-tag tracking (column 15)
+            tags_auto_applied: row
+                .get::<_, Option<bool>>(15)
+                .ok()
+                .flatten()
+                .unwrap_or(false),
+            // SimpleFIN fields (columns 16-22)
+            sf_id: row.get(16).ok(),
+            sf_posted: row.get(17).ok(),
+            sf_amount: row.get(18).ok(),
+            sf_description: row.get(19).ok(),
+            sf_transacted_at: row.get(20).ok(),
+            sf_pending: row.get(21).ok(),
             sf_extra: sf_extra_json.and_then(|s| serde_json::from_str(&s).ok()),
-            // Lunchflow fields (columns 22-29)
-            lf_id: row.get(22).ok(),
-            lf_account_id: row.get(23).ok(),
-            lf_amount: row.get::<_, Option<f64>>(24).ok().flatten().map(|f| Decimal::try_from(f).unwrap_or_default()),
-            lf_currency: row.get(25).ok(),
+            // Lunchflow fields (columns 23-30)
+            lf_id: row.get(23).ok(),
+            lf_account_id: row.get(24).ok(),
+            lf_amount: row
+                .get::<_, Option<f64>>(25)
+                .ok()
+                .flatten()
+                .map(|f| Decimal::try_from(f).unwrap_or_default()),
+            lf_currency: row.get(26).ok(),
             lf_date: lf_date_str.map(|s| parse_date(&s)),
-            lf_merchant: row.get(27).ok(),
-            lf_description: row.get(28).ok(),
-            lf_is_pending: row.get(29).ok(),
+            lf_merchant: row.get(28).ok(),
+            lf_description: row.get(29).ok(),
+            lf_is_pending: row.get(30).ok(),
         }
     }
 
@@ -545,10 +568,10 @@ impl DuckDbRepository {
             "INSERT INTO sys_transactions (transaction_id, account_id, amount, description,
                                            transaction_date, posted_date, tags, external_ids,
                                            parent_transaction_id, created_at, updated_at,
-                                           csv_fingerprint, csv_batch_id, is_manual,
+                                           csv_fingerprint, csv_batch_id, is_manual, tags_auto_applied,
                                            sf_id, sf_posted, sf_amount, sf_description, sf_transacted_at, sf_pending, sf_extra,
                                            lf_id, lf_account_id, lf_amount, lf_currency, lf_date, lf_merchant, lf_description, lf_is_pending)
-             VALUES (?, ?, ?, ?, ?, ?, {}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, ?, ?, {}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (transaction_id) DO UPDATE SET
                 account_id = EXCLUDED.account_id,
                 amount = EXCLUDED.amount,
@@ -562,6 +585,7 @@ impl DuckDbRepository {
                 csv_fingerprint = COALESCE(EXCLUDED.csv_fingerprint, sys_transactions.csv_fingerprint),
                 csv_batch_id = COALESCE(EXCLUDED.csv_batch_id, sys_transactions.csv_batch_id),
                 is_manual = COALESCE(sys_transactions.is_manual, EXCLUDED.is_manual),
+                tags_auto_applied = COALESCE(sys_transactions.tags_auto_applied, EXCLUDED.tags_auto_applied),
                 sf_id = COALESCE(EXCLUDED.sf_id, sys_transactions.sf_id),
                 sf_posted = COALESCE(EXCLUDED.sf_posted, sys_transactions.sf_posted),
                 sf_amount = COALESCE(EXCLUDED.sf_amount, sys_transactions.sf_amount),
@@ -596,6 +620,7 @@ impl DuckDbRepository {
                 tx.csv_fingerprint,
                 tx.csv_batch_id,
                 tx.is_manual,
+                tx.tags_auto_applied,
                 tx.sf_id,
                 tx.sf_posted,
                 tx.sf_amount,
@@ -605,7 +630,8 @@ impl DuckDbRepository {
                 sf_extra,
                 tx.lf_id,
                 tx.lf_account_id,
-                tx.lf_amount.map(|d| d.to_string().parse::<f64>().unwrap_or(0.0)),
+                tx.lf_amount
+                    .map(|d| d.to_string().parse::<f64>().unwrap_or(0.0)),
                 tx.lf_currency,
                 tx.lf_date.map(|d| d.to_string()),
                 tx.lf_merchant,
@@ -628,6 +654,18 @@ impl DuckDbRepository {
         Ok(())
     }
 
+    /// Update transaction tags and mark them as auto-applied (by rules)
+    pub fn update_transaction_tags_auto(&self, tx_id: &str, tags: &[String]) -> Result<()> {
+        let conn = self.conn.lock().unwrap();
+        let tags_literal = format_tags_array(tags);
+        let sql = format!(
+            "UPDATE sys_transactions SET tags = {}, tags_auto_applied = TRUE, updated_at = CURRENT_TIMESTAMP WHERE transaction_id = ?",
+            tags_literal
+        );
+        conn.execute(&sql, params![tx_id])?;
+        Ok(())
+    }
+
     /// Insert a transaction only if it doesn't already exist (skip existing to preserve user edits)
     /// Returns true if inserted, false if skipped
     pub fn insert_transaction_if_not_exists(&self, tx: &Transaction) -> Result<bool> {
@@ -642,10 +680,10 @@ impl DuckDbRepository {
             "INSERT INTO sys_transactions (transaction_id, account_id, amount, description,
                                            transaction_date, posted_date, tags, external_ids,
                                            parent_transaction_id, created_at, updated_at,
-                                           csv_fingerprint, csv_batch_id, is_manual,
+                                           csv_fingerprint, csv_batch_id, is_manual, tags_auto_applied,
                                            sf_id, sf_posted, sf_amount, sf_description, sf_transacted_at, sf_pending, sf_extra,
                                            lf_id, lf_account_id, lf_amount, lf_currency, lf_date, lf_merchant, lf_description, lf_is_pending)
-             VALUES (?, ?, ?, ?, ?, ?, {}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             VALUES (?, ?, ?, ?, ?, ?, {}, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
              ON CONFLICT (transaction_id) DO NOTHING",
             tags_literal
         );
@@ -666,6 +704,7 @@ impl DuckDbRepository {
                 tx.csv_fingerprint,
                 tx.csv_batch_id,
                 tx.is_manual,
+                tx.tags_auto_applied,
                 tx.sf_id,
                 tx.sf_posted,
                 tx.sf_amount,
@@ -675,7 +714,8 @@ impl DuckDbRepository {
                 sf_extra,
                 tx.lf_id,
                 tx.lf_account_id,
-                tx.lf_amount.map(|d| d.to_string().parse::<f64>().unwrap_or(0.0)),
+                tx.lf_amount
+                    .map(|d| d.to_string().parse::<f64>().unwrap_or(0.0)),
                 tx.lf_currency,
                 tx.lf_date.map(|d| d.to_string()),
                 tx.lf_merchant,
@@ -722,7 +762,11 @@ impl DuckDbRepository {
 
     /// Check if a CSV fingerprint exists in batches other than the current one
     /// This allows duplicate transactions within a single import batch but prevents re-import
-    pub fn csv_fingerprint_exists_in_other_batches(&self, fingerprint: &str, current_batch_id: &str) -> Result<bool> {
+    pub fn csv_fingerprint_exists_in_other_batches(
+        &self,
+        fingerprint: &str,
+        current_batch_id: &str,
+    ) -> Result<bool> {
         let conn = self.conn.lock().unwrap();
         let count: i64 = conn.query_row(
             "SELECT COUNT(*) FROM sys_transactions WHERE csv_fingerprint = ? AND (csv_batch_id IS NULL OR csv_batch_id != ?)",
@@ -738,15 +782,15 @@ impl DuckDbRepository {
         let mut stmt = conn.prepare(
             "SELECT transaction_id, account_id, amount, description, transaction_date::VARCHAR,
                     posted_date::VARCHAR, CAST(tags AS VARCHAR) as tags, external_ids, deleted_at, parent_transaction_id,
-                    created_at, updated_at, csv_fingerprint, csv_batch_id, is_manual,
+                    created_at, updated_at, csv_fingerprint, csv_batch_id, is_manual, tags_auto_applied,
                     sf_id, sf_posted, sf_amount, sf_description, sf_transacted_at, sf_pending, sf_extra,
                     lf_id, lf_account_id, lf_amount, lf_currency, lf_date::VARCHAR, lf_merchant, lf_description, lf_is_pending
              FROM sys_transactions WHERE transaction_id = ?"
         )?;
 
-        let tx = stmt.query_row([id], |row| {
-            Ok(self.row_to_transaction(row))
-        }).ok();
+        let tx = stmt
+            .query_row([id], |row| Ok(self.row_to_transaction(row)))
+            .ok();
 
         Ok(tx)
     }
@@ -797,7 +841,12 @@ impl DuckDbRepository {
         Ok(snapshots)
     }
 
-    pub fn update_balance_snapshot(&self, snapshot_id: &str, new_balance: Decimal, new_source: &str) -> Result<()> {
+    pub fn update_balance_snapshot(
+        &self,
+        snapshot_id: &str,
+        new_balance: Decimal,
+        new_source: &str,
+    ) -> Result<()> {
         let conn = self.conn.lock().unwrap();
         conn.execute(
             "UPDATE sys_balance_snapshots SET balance = ?, source = ?, updated_at = ? WHERE snapshot_id = ?",
@@ -825,11 +874,7 @@ impl DuckDbRepository {
              WHERE account_id = ?
              AND CAST(snapshot_time AS DATE) >= ?
              AND CAST(snapshot_time AS DATE) <= ?",
-            params![
-                account_id,
-                start_date.to_string(),
-                end_date.to_string(),
-            ],
+            params![account_id, start_date.to_string(), end_date.to_string(),],
         )?;
         Ok(deleted)
     }
@@ -860,7 +905,11 @@ impl DuckDbRepository {
         // Validate it's a read-only query by checking SQL statement type
         // Only look at the first word after stripping whitespace/comments
         let sql_trimmed = sql.trim();
-        let first_word = sql_trimmed.split_whitespace().next().unwrap_or("").to_uppercase();
+        let first_word = sql_trimmed
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .to_uppercase();
         if first_word != "SELECT" && first_word != "WITH" {
             anyhow::bail!("Only SELECT queries are allowed");
         }
@@ -869,9 +918,24 @@ impl DuckDbRepository {
         let sql_upper = sql.to_uppercase();
         // Use word boundaries to avoid false positives (deleted_at vs DELETE)
         let dangerous_patterns = [
-            " INSERT ", " UPDATE ", " DROP ", " CREATE ", " ALTER ", " TRUNCATE ",
-            "\nINSERT ", "\nUPDATE ", "\nDROP ", "\nCREATE ", "\nALTER ", "\nTRUNCATE ",
-            "(INSERT ", "(UPDATE ", "(DROP ", "(CREATE ", "(ALTER ", "(TRUNCATE ",
+            " INSERT ",
+            " UPDATE ",
+            " DROP ",
+            " CREATE ",
+            " ALTER ",
+            " TRUNCATE ",
+            "\nINSERT ",
+            "\nUPDATE ",
+            "\nDROP ",
+            "\nCREATE ",
+            "\nALTER ",
+            "\nTRUNCATE ",
+            "(INSERT ",
+            "(UPDATE ",
+            "(DROP ",
+            "(CREATE ",
+            "(ALTER ",
+            "(TRUNCATE ",
         ];
         for pattern in dangerous_patterns {
             if sql_upper.contains(pattern) {
@@ -909,13 +973,21 @@ impl DuckDbRepository {
         // Now get column names
         let columns: Vec<String> = if column_count > 0 {
             (0..column_count)
-                .map(|i| stmt.column_name(i).map(|s| s.to_string()).unwrap_or_else(|_| format!("col{}", i)))
+                .map(|i| {
+                    stmt.column_name(i)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|_| format!("col{}", i))
+                })
                 .collect()
         } else {
             // No rows, try to get column count from statement
             let count = stmt.column_count();
             (0..count)
-                .map(|i| stmt.column_name(i).map(|s| s.to_string()).unwrap_or_else(|_| format!("col{}", i)))
+                .map(|i| {
+                    stmt.column_name(i)
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|_| format!("col{}", i))
+                })
                 .collect()
         };
 
@@ -938,7 +1010,11 @@ impl DuckDbRepository {
         validate_sql_syntax(sql)?;
 
         let sql_trimmed = sql.trim();
-        let first_word = sql_trimmed.split_whitespace().next().unwrap_or("").to_uppercase();
+        let first_word = sql_trimmed
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .to_uppercase();
 
         let is_select = first_word == "SELECT"
             || first_word == "WITH"
@@ -972,12 +1048,20 @@ impl DuckDbRepository {
 
             let columns: Vec<String> = if column_count > 0 {
                 (0..column_count)
-                    .map(|i| stmt.column_name(i).map(|s| s.to_string()).unwrap_or_else(|_| format!("col{}", i)))
+                    .map(|i| {
+                        stmt.column_name(i)
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|_| format!("col{}", i))
+                    })
                     .collect()
             } else {
                 let count = stmt.column_count();
                 (0..count)
-                    .map(|i| stmt.column_name(i).map(|s| s.to_string()).unwrap_or_else(|_| format!("col{}", i)))
+                    .map(|i| {
+                        stmt.column_name(i)
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|_| format!("col{}", i))
+                    })
                     .collect()
             };
 
@@ -1003,12 +1087,20 @@ impl DuckDbRepository {
     /// Execute parameterized SQL (read or write)
     ///
     /// Parameters are passed as JSON values and bound to ? placeholders.
-    pub fn execute_sql_with_params(&self, sql: &str, params: &[serde_json::Value]) -> Result<QueryResult> {
+    pub fn execute_sql_with_params(
+        &self,
+        sql: &str,
+        params: &[serde_json::Value],
+    ) -> Result<QueryResult> {
         // Validate SQL syntax before execution to prevent crashes on malformed queries
         validate_sql_syntax(sql)?;
 
         let sql_trimmed = sql.trim();
-        let first_word = sql_trimmed.split_whitespace().next().unwrap_or("").to_uppercase();
+        let first_word = sql_trimmed
+            .split_whitespace()
+            .next()
+            .unwrap_or("")
+            .to_uppercase();
 
         let is_select = first_word == "SELECT"
             || first_word == "WITH"
@@ -1018,10 +1110,12 @@ impl DuckDbRepository {
         let conn = self.conn.lock().unwrap();
 
         // Convert JSON params to DuckDB params
-        let duckdb_params: Vec<Box<dyn duckdb::ToSql>> = params.iter().map(|v| {
-            Self::json_to_duckdb_param(v)
-        }).collect();
-        let param_refs: Vec<&dyn duckdb::ToSql> = duckdb_params.iter().map(|b| b.as_ref()).collect();
+        let duckdb_params: Vec<Box<dyn duckdb::ToSql>> = params
+            .iter()
+            .map(|v| Self::json_to_duckdb_param(v))
+            .collect();
+        let param_refs: Vec<&dyn duckdb::ToSql> =
+            duckdb_params.iter().map(|b| b.as_ref()).collect();
 
         if is_select {
             // Read query - return columns and rows
@@ -1048,12 +1142,20 @@ impl DuckDbRepository {
 
             let columns: Vec<String> = if column_count > 0 {
                 (0..column_count)
-                    .map(|i| stmt.column_name(i).map(|s| s.to_string()).unwrap_or_else(|_| format!("col{}", i)))
+                    .map(|i| {
+                        stmt.column_name(i)
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|_| format!("col{}", i))
+                    })
                     .collect()
             } else {
                 let count = stmt.column_count();
                 (0..count)
-                    .map(|i| stmt.column_name(i).map(|s| s.to_string()).unwrap_or_else(|_| format!("col{}", i)))
+                    .map(|i| {
+                        stmt.column_name(i)
+                            .map(|s| s.to_string())
+                            .unwrap_or_else(|_| format!("col{}", i))
+                    })
                     .collect()
             };
 
@@ -1094,12 +1196,13 @@ impl DuckDbRepository {
             serde_json::Value::String(s) => Box::new(s.clone()),
             serde_json::Value::Array(arr) => {
                 // Convert array to comma-separated string
-                let strings: Vec<String> = arr.iter().map(|v| {
-                    match v {
+                let strings: Vec<String> = arr
+                    .iter()
+                    .map(|v| match v {
                         serde_json::Value::String(s) => s.clone(),
                         _ => v.to_string(),
-                    }
-                }).collect();
+                    })
+                    .collect();
                 Box::new(strings.join(","))
             }
             serde_json::Value::Object(_) => {
@@ -1158,7 +1261,11 @@ impl DuckDbRepository {
                 serde_json::Value::String(dt)
             }
             Ok(ValueRef::Time64(_, t)) => serde_json::json!(t),
-            Ok(ValueRef::Interval { months, days, nanos }) => {
+            Ok(ValueRef::Interval {
+                months,
+                days,
+                nanos,
+            }) => {
                 serde_json::json!({
                     "months": months,
                     "days": days,
@@ -1228,7 +1335,11 @@ impl DuckDbRepository {
         }
     }
 
-    fn struct_to_json(&self, arr: &duckdb::arrow::array::StructArray, idx: usize) -> serde_json::Value {
+    fn struct_to_json(
+        &self,
+        arr: &duckdb::arrow::array::StructArray,
+        idx: usize,
+    ) -> serde_json::Value {
         use duckdb::arrow::array::Array;
 
         if arr.is_null(idx) {
@@ -1242,7 +1353,10 @@ impl DuckDbRepository {
             if col.is_null(idx) {
                 obj.insert(field.name().clone(), serde_json::Value::Null);
             } else {
-                obj.insert(field.name().clone(), serde_json::Value::String(format!("{:?}", col)));
+                obj.insert(
+                    field.name().clone(),
+                    serde_json::Value::String(format!("{:?}", col)),
+                );
             }
         }
         serde_json::Value::Object(obj)
@@ -1252,16 +1366,19 @@ impl DuckDbRepository {
 
     pub fn get_integrations(&self) -> Result<Vec<Integration>> {
         let conn = self.conn.lock().unwrap();
-        let mut stmt = conn.prepare(
-            "SELECT integration_name, integration_settings FROM sys_integrations"
-        )?;
+        let mut stmt =
+            conn.prepare("SELECT integration_name, integration_settings FROM sys_integrations")?;
 
-        let integrations = stmt.query_map([], |row| {
-            let name: String = row.get(0)?;
-            let settings_json: String = row.get(1)?;
-            let settings: serde_json::Value = serde_json::from_str(&settings_json).unwrap_or(serde_json::json!({}));
-            Ok(Integration { name, settings })
-        })?.filter_map(|r| r.ok()).collect();
+        let integrations = stmt
+            .query_map([], |row| {
+                let name: String = row.get(0)?;
+                let settings_json: String = row.get(1)?;
+                let settings: serde_json::Value =
+                    serde_json::from_str(&settings_json).unwrap_or(serde_json::json!({}));
+                Ok(Integration { name, settings })
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
 
         Ok(integrations)
     }
@@ -1309,8 +1426,7 @@ impl DuckDbRepository {
 
         // Create a new in-memory connection for the compact operation
         // This allows us to attach both source and target databases
-        let config = duckdb::Config::default()
-            .enable_autoload_extension(false)?;
+        let config = duckdb::Config::default().enable_autoload_extension(false)?;
         let compact_conn = Connection::open_in_memory_with_flags(config)?;
 
         // Attach the source database (current db_path)
@@ -1341,10 +1457,7 @@ impl DuckDbRepository {
                 [],
             )?;
         } else {
-            compact_conn.execute(
-                &format!("ATTACH '{}' AS target_db", temp_db.display()),
-                [],
-            )?;
+            compact_conn.execute(&format!("ATTACH '{}' AS target_db", temp_db.display()), [])?;
         }
 
         // Workaround for DuckDB issue #16785: COPY FROM DATABASE with foreign keys
@@ -1374,8 +1487,7 @@ impl DuckDbRepository {
 
         // Reopen the connection to the new compacted database
         let new_conn = if let Some(key) = &self.encryption_key {
-            let config = duckdb::Config::default()
-                .enable_autoload_extension(false)?;
+            let config = duckdb::Config::default().enable_autoload_extension(false)?;
             let conn = Connection::open_in_memory_with_flags(config)?;
             conn.execute(
                 &format!(
@@ -1388,8 +1500,7 @@ impl DuckDbRepository {
             conn.execute("USE main_db", [])?;
             conn
         } else {
-            let config = duckdb::Config::default()
-                .enable_autoload_extension(false)?;
+            let config = duckdb::Config::default().enable_autoload_extension(false)?;
             Connection::open_with_flags(&self.db_path, config)?
         };
 
@@ -1415,10 +1526,11 @@ impl DuckDbRepository {
         let mut stmt = conn.prepare(
             "SELECT t.transaction_id FROM sys_transactions t
              LEFT JOIN sys_accounts a ON t.account_id = a.account_id
-             WHERE a.account_id IS NULL AND t.deleted_at IS NULL"
+             WHERE a.account_id IS NULL AND t.deleted_at IS NULL",
         )?;
 
-        let orphans: Vec<String> = stmt.query_map([], |row| row.get(0))?
+        let orphans: Vec<String> = stmt
+            .query_map([], |row| row.get(0))?
             .filter_map(|r| r.ok())
             .collect();
 
@@ -1430,10 +1542,11 @@ impl DuckDbRepository {
         let mut stmt = conn.prepare(
             "SELECT s.snapshot_id FROM sys_balance_snapshots s
              LEFT JOIN sys_accounts a ON s.account_id = a.account_id
-             WHERE a.account_id IS NULL"
+             WHERE a.account_id IS NULL",
         )?;
 
-        let orphans: Vec<String> = stmt.query_map([], |row| row.get(0))?
+        let orphans: Vec<String> = stmt
+            .query_map([], |row| row.get(0))?
             .filter_map(|r| r.ok())
             .collect();
 
@@ -1443,7 +1556,9 @@ impl DuckDbRepository {
     pub fn check_future_transactions(&self) -> Result<i64> {
         let conn = self.conn.lock().unwrap();
         // Use Rust-computed date to avoid ICU extension dependency
-        let tomorrow = (chrono::Utc::now() + chrono::Duration::days(1)).format("%Y-%m-%d").to_string();
+        let tomorrow = (chrono::Utc::now() + chrono::Duration::days(1))
+            .format("%Y-%m-%d")
+            .to_string();
         let count: i64 = conn.query_row(
             "SELECT COUNT(*) FROM sys_transactions
              WHERE transaction_date > ? AND deleted_at IS NULL",
@@ -1482,23 +1597,34 @@ impl DuckDbRepository {
     pub fn check_date_sanity(&self) -> Result<Vec<String>> {
         let conn = self.conn.lock().unwrap();
         // Use Rust-computed date to avoid ICU extension dependency
-        let one_year_future = (chrono::Utc::now() + chrono::Duration::days(365)).format("%Y-%m-%d").to_string();
+        let one_year_future = (chrono::Utc::now() + chrono::Duration::days(365))
+            .format("%Y-%m-%d")
+            .to_string();
         let mut stmt = conn.prepare(
             "SELECT transaction_id, transaction_date::VARCHAR, description, amount
              FROM sys_transactions
              WHERE deleted_at IS NULL
                AND (transaction_date > ?
                     OR transaction_date < '1970-01-01')
-             LIMIT 100"
+             LIMIT 100",
         )?;
 
-        let results: Vec<String> = stmt.query_map(params![one_year_future], |row| {
-            let tx_id: String = row.get(0)?;
-            let date: String = row.get(1)?;
-            let desc: Option<String> = row.get(2)?;
-            let amount: f64 = row.get(3)?;
-            Ok(format!("{}|{}|{}|{}", tx_id, date, desc.unwrap_or_default(), amount))
-        })?.filter_map(|r| r.ok()).collect();
+        let results: Vec<String> = stmt
+            .query_map(params![one_year_future], |row| {
+                let tx_id: String = row.get(0)?;
+                let date: String = row.get(1)?;
+                let desc: Option<String> = row.get(2)?;
+                let amount: f64 = row.get(3)?;
+                Ok(format!(
+                    "{}|{}|{}|{}",
+                    tx_id,
+                    date,
+                    desc.unwrap_or_default(),
+                    amount
+                ))
+            })?
+            .filter_map(|r| r.ok())
+            .collect();
 
         Ok(results)
     }
@@ -1584,8 +1710,7 @@ impl DuckDbRepository {
             "SELECT transaction_id FROM transactions
              WHERE transaction_id IN ({})
              AND ({})",
-            in_clause,
-            sql_condition
+            in_clause, sql_condition
         );
 
         let mut stmt = conn.prepare(&sql)?;
@@ -1630,8 +1755,7 @@ fn parse_timestamp(s: &str) -> DateTime<Utc> {
 }
 
 fn parse_date(s: &str) -> NaiveDate {
-    NaiveDate::parse_from_str(s, "%Y-%m-%d")
-        .unwrap_or_else(|_| Utc::now().date_naive())
+    NaiveDate::parse_from_str(s, "%Y-%m-%d").unwrap_or_else(|_| Utc::now().date_naive())
 }
 
 fn parse_naive_datetime(s: &str) -> NaiveDateTime {
@@ -1644,7 +1768,11 @@ fn parse_naive_datetime(s: &str) -> NaiveDateTime {
         s.trim_end_matches('Z')
             .rsplit_once('+')
             .map(|(base, _)| base)
-            .or_else(|| s.rsplit_once('-').filter(|(base, tz)| base.len() > 10 && tz.contains(':')).map(|(base, _)| base))
+            .or_else(|| {
+                s.rsplit_once('-')
+                    .filter(|(base, tz)| base.len() > 10 && tz.contains(':'))
+                    .map(|(base, _)| base)
+            })
             .unwrap_or(s)
     } else {
         s
@@ -1691,12 +1819,7 @@ fn parse_duckdb_array(s: &str) -> Vec<String> {
     // Split by comma and clean up each element
     inner
         .split(',')
-        .map(|item| {
-            item.trim()
-                .trim_matches('\'')
-                .trim_matches('"')
-                .to_string()
-        })
+        .map(|item| item.trim().trim_matches('\'').trim_matches('"').to_string())
         .filter(|s| !s.is_empty())
         .collect()
 }
@@ -1726,21 +1849,23 @@ mod tests {
     fn test_valid_select_with_join() {
         assert!(validate_sql_syntax(
             "SELECT t.*, a.name FROM transactions t JOIN accounts a ON t.account_id = a.id"
-        ).is_ok());
+        )
+        .is_ok());
     }
 
     #[test]
     fn test_valid_insert() {
-        assert!(validate_sql_syntax(
-            "INSERT INTO transactions (id, amount) VALUES ('abc', 100)"
-        ).is_ok());
+        assert!(
+            validate_sql_syntax("INSERT INTO transactions (id, amount) VALUES ('abc', 100)")
+                .is_ok()
+        );
     }
 
     #[test]
     fn test_valid_update() {
-        assert!(validate_sql_syntax(
-            "UPDATE transactions SET amount = 200 WHERE id = 'abc'"
-        ).is_ok());
+        assert!(
+            validate_sql_syntax("UPDATE transactions SET amount = 200 WHERE id = 'abc'").is_ok()
+        );
     }
 
     #[test]
@@ -1752,14 +1877,16 @@ mod tests {
     fn test_valid_cte() {
         assert!(validate_sql_syntax(
             "WITH monthly AS (SELECT * FROM transactions) SELECT * FROM monthly"
-        ).is_ok());
+        )
+        .is_ok());
     }
 
     #[test]
     fn test_valid_subquery() {
         assert!(validate_sql_syntax(
             "SELECT * FROM transactions WHERE account_id IN (SELECT id FROM accounts)"
-        ).is_ok());
+        )
+        .is_ok());
     }
 
     #[test]
@@ -1795,7 +1922,8 @@ mod tests {
 
     #[test]
     fn test_missing_space_before_group() {
-        let result = validate_sql_syntax("SELECT account_id, COUNT(*) FROM transactionsGROUP BY account_id");
+        let result =
+            validate_sql_syntax("SELECT account_id, COUNT(*) FROM transactionsGROUP BY account_id");
         assert!(result.is_err());
     }
 
@@ -1944,7 +2072,11 @@ mod tests {
         let err = result.unwrap_err().to_string();
 
         // Should contain line/column info
-        assert!(err.contains("Line:") || err.contains("line"), "Error was: {}", err);
+        assert!(
+            err.contains("Line:") || err.contains("line"),
+            "Error was: {}",
+            err
+        );
     }
 
     // ==================== parse_duckdb_array Tests ====================
@@ -2012,6 +2144,9 @@ mod tests {
     #[test]
     fn test_parse_duckdb_array_filters_empty_elements() {
         // Empty elements should be filtered out
-        assert_eq!(parse_duckdb_array("[groceries, , food]"), vec!["groceries", "food"]);
+        assert_eq!(
+            parse_duckdb_array("[groceries, , food]"),
+            vec!["groceries", "food"]
+        );
     }
 }

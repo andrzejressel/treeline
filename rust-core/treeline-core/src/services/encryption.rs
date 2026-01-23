@@ -26,7 +26,10 @@ pub struct EncryptionService {
 
 impl EncryptionService {
     pub fn new(treeline_dir: PathBuf, db_path: PathBuf) -> Self {
-        Self { treeline_dir, db_path }
+        Self {
+            treeline_dir,
+            db_path,
+        }
     }
 
     fn encryption_file(&self) -> PathBuf {
@@ -34,13 +37,19 @@ impl EncryptionService {
     }
 
     /// Derive encryption key from password using Argon2id
-    fn derive_key(&self, password: &str, salt: &[u8], params: &crate::domain::Argon2Params) -> Result<Vec<u8>> {
+    fn derive_key(
+        &self,
+        password: &str,
+        salt: &[u8],
+        params: &crate::domain::Argon2Params,
+    ) -> Result<Vec<u8>> {
         let argon2_params = argon2::Params::new(
             params.memory_cost,
             params.time_cost,
             params.parallelism,
             Some(params.hash_len as usize),
-        ).map_err(|e| anyhow::anyhow!("Failed to create argon2 params: {:?}", e))?;
+        )
+        .map_err(|e| anyhow::anyhow!("Failed to create argon2 params: {:?}", e))?;
 
         let argon2 = argon2::Argon2::new(
             argon2::Algorithm::Argon2id,
@@ -49,7 +58,8 @@ impl EncryptionService {
         );
 
         let mut key = vec![0u8; params.hash_len as usize];
-        argon2.hash_password_into(password.as_bytes(), salt, &mut key)
+        argon2
+            .hash_password_into(password.as_bytes(), salt, &mut key)
             .map_err(|e| anyhow::anyhow!("Failed to derive key: {:?}", e))?;
 
         Ok(key)
@@ -88,7 +98,8 @@ impl EncryptionService {
             anyhow::bail!("Database is not encrypted");
         }
 
-        let salt = base64::engine::general_purpose::STANDARD.decode(&metadata.salt)
+        let salt = base64::engine::general_purpose::STANDARD
+            .decode(&metadata.salt)
             .context("Invalid salt in encryption metadata")?;
 
         let key = self.derive_key(password, &salt, &metadata.argon2_params)?;
@@ -96,7 +107,11 @@ impl EncryptionService {
     }
 
     /// Enable encryption
-    pub fn encrypt(&self, password: &str, backup_service: &super::BackupService) -> Result<EncryptResult> {
+    pub fn encrypt(
+        &self,
+        password: &str,
+        backup_service: &super::BackupService,
+    ) -> Result<EncryptResult> {
         if self.is_encrypted()? {
             anyhow::bail!("Database is already encrypted");
         }
@@ -127,8 +142,8 @@ impl EncryptionService {
         let key_hex = hex::encode(&key);
 
         // Create temp directory for export
-        let export_dir = tempfile::tempdir()
-            .context("Failed to create temp directory for export")?;
+        let export_dir =
+            tempfile::tempdir().context("Failed to create temp directory for export")?;
         let export_path = export_dir.path();
 
         // Create temp file for new encrypted database
@@ -149,10 +164,8 @@ impl EncryptionService {
                 .context("Failed to configure database")?;
             let conn = Connection::open_with_flags(&self.db_path, config)
                 .context("Failed to open original database")?;
-            conn.execute_batch(&format!(
-                "EXPORT DATABASE '{}'",
-                export_path.display()
-            )).context("Failed to export database")?;
+            conn.execute_batch(&format!("EXPORT DATABASE '{}'", export_path.display()))
+                .context("Failed to export database")?;
         }
 
         // Create new encrypted database and import data
@@ -168,14 +181,14 @@ impl EncryptionService {
                 "ATTACH '{}' AS enc (ENCRYPTION_KEY '{}')",
                 temp_db_path.display(),
                 key_hex
-            )).context("Failed to attach encrypted database")?;
+            ))
+            .context("Failed to attach encrypted database")?;
 
             // Use the attached database and import
-            conn.execute_batch("USE enc").context("Failed to use encrypted database")?;
-            conn.execute_batch(&format!(
-                "IMPORT DATABASE '{}'",
-                export_path.display()
-            )).context("Failed to import database")?;
+            conn.execute_batch("USE enc")
+                .context("Failed to use encrypted database")?;
+            conn.execute_batch(&format!("IMPORT DATABASE '{}'", export_path.display()))
+                .context("Failed to import database")?;
         }
 
         // Replace original with encrypted version
@@ -200,7 +213,11 @@ impl EncryptionService {
     }
 
     /// Disable encryption
-    pub fn decrypt(&self, password: &str, backup_service: &super::BackupService) -> Result<EncryptResult> {
+    pub fn decrypt(
+        &self,
+        password: &str,
+        backup_service: &super::BackupService,
+    ) -> Result<EncryptResult> {
         if !self.is_encrypted()? {
             anyhow::bail!("Database is not encrypted");
         }
@@ -211,7 +228,8 @@ impl EncryptionService {
         let metadata: EncryptionMetadata = serde_json::from_str(&content)?;
 
         // Derive key
-        let salt = base64::engine::general_purpose::STANDARD.decode(&metadata.salt)
+        let salt = base64::engine::general_purpose::STANDARD
+            .decode(&metadata.salt)
             .context("Invalid salt in encryption metadata")?;
         let key = self.derive_key(password, &salt, &metadata.argon2_params)?;
         let key_hex = hex::encode(&key);
@@ -228,7 +246,8 @@ impl EncryptionService {
                 "ATTACH '{}' AS enc (ENCRYPTION_KEY '{}', READ_ONLY)",
                 self.db_path.display(),
                 key_hex
-            )).map_err(|_| anyhow::anyhow!("Invalid password"))?;
+            ))
+            .map_err(|_| anyhow::anyhow!("Invalid password"))?;
 
             // Try to read something to verify
             conn.execute_batch("USE enc")
@@ -237,15 +256,16 @@ impl EncryptionService {
                 "SELECT table_name FROM information_schema.tables LIMIT 1",
                 [],
                 |_| Ok(()),
-            ).map_err(|_| anyhow::anyhow!("Invalid password"))?;
+            )
+            .map_err(|_| anyhow::anyhow!("Invalid password"))?;
         }
 
         // Create backup first
         let backup = backup_service.create(None)?;
 
         // Create temp directory for export
-        let export_dir = tempfile::tempdir()
-            .context("Failed to create temp directory for export")?;
+        let export_dir =
+            tempfile::tempdir().context("Failed to create temp directory for export")?;
         let export_path = export_dir.path();
 
         // Create temp file for new decrypted database
@@ -269,15 +289,15 @@ impl EncryptionService {
                 "ATTACH '{}' AS enc (ENCRYPTION_KEY '{}')",
                 self.db_path.display(),
                 key_hex
-            )).context("Failed to attach encrypted database")?;
+            ))
+            .context("Failed to attach encrypted database")?;
 
-            conn.execute_batch("USE enc").context("Failed to use encrypted database")?;
+            conn.execute_batch("USE enc")
+                .context("Failed to use encrypted database")?;
 
             // Export to CSV (default format, no extensions needed)
-            conn.execute_batch(&format!(
-                "EXPORT DATABASE '{}'",
-                export_path.display()
-            )).context("Failed to export encrypted database")?;
+            conn.execute_batch(&format!("EXPORT DATABASE '{}'", export_path.display()))
+                .context("Failed to export encrypted database")?;
         }
 
         // Create new unencrypted database and import data
@@ -287,10 +307,8 @@ impl EncryptionService {
                 .context("Failed to configure database")?;
             let conn = Connection::open_with_flags(&temp_db_path, config)
                 .context("Failed to create new unencrypted database")?;
-            conn.execute_batch(&format!(
-                "IMPORT DATABASE '{}'",
-                export_path.display()
-            )).context("Failed to import database")?;
+            conn.execute_batch(&format!("IMPORT DATABASE '{}'", export_path.display()))
+                .context("Failed to import database")?;
         }
 
         // Replace original with decrypted version

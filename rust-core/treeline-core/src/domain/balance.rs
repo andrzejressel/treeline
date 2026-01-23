@@ -66,8 +66,8 @@ mod tests {
     fn test_balance_snapshot_creation() {
         let account_id = Uuid::new_v4();
         let balance = Decimal::new(10000, 2); // 100.00
-        let time = NaiveDateTime::parse_from_str("2025-01-15 10:30:00", "%Y-%m-%d %H:%M:%S")
-            .unwrap();
+        let time =
+            NaiveDateTime::parse_from_str("2025-01-15 10:30:00", "%Y-%m-%d %H:%M:%S").unwrap();
 
         let snapshot = BalanceSnapshot::from_sync(account_id, balance, time);
 

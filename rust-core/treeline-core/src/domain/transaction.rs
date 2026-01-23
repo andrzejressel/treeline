@@ -41,6 +41,12 @@ pub struct Transaction {
     pub is_manual: bool,
 
     // =========================================================================
+    // Auto-tag tracking
+    // =========================================================================
+    /// True if any tags on this transaction were applied by auto-tag rules
+    pub tags_auto_applied: bool,
+
+    // =========================================================================
     // SimpleFIN: ALL fields from API (https://www.simplefin.org/protocol.html)
     // =========================================================================
     /// SimpleFIN transaction ID (required for dedup)
@@ -81,12 +87,7 @@ pub struct Transaction {
 
 impl Transaction {
     /// Create a new transaction with required fields
-    pub fn new(
-        id: Uuid,
-        account_id: Uuid,
-        amount: Decimal,
-        transaction_date: NaiveDate,
-    ) -> Self {
+    pub fn new(id: Uuid, account_id: Uuid, amount: Decimal, transaction_date: NaiveDate) -> Self {
         let now = Utc::now();
         Self {
             id,
@@ -105,6 +106,8 @@ impl Transaction {
             csv_batch_id: None,
             // Manual flag
             is_manual: false,
+            // Auto-tag tracking
+            tags_auto_applied: false,
             // SimpleFIN fields
             sf_id: None,
             sf_posted: None,
@@ -253,8 +256,10 @@ mod tests {
     #[test]
     fn test_description_normalization() {
         // Card mask removal
-        assert!(!Transaction::normalize_description(Some("PURCHASE XXXXXXXXXXXX1234 STORE"))
-            .contains("xxxx"));
+        assert!(
+            !Transaction::normalize_description(Some("PURCHASE XXXXXXXXXXXX1234 STORE"))
+                .contains("xxxx")
+        );
 
         // Null removal
         assert!(!Transaction::normalize_description(Some("null PAYMENT null")).contains("null"));

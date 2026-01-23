@@ -9,11 +9,11 @@ use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc};
 use regex::Regex;
 use rust_decimal::Decimal;
 use serde::Serialize;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::adapters::duckdb::DuckDbRepository;
-use crate::config::{ColumnMappings, Config, ImportProfile, ImportOptions as ConfigImportOptions};
+use crate::config::{ColumnMappings, Config, ImportOptions as ConfigImportOptions, ImportProfile};
 use crate::domain::{BalanceSnapshot, Transaction};
 use crate::services::TagService;
 
@@ -66,7 +66,11 @@ pub struct ImportService {
 impl ImportService {
     pub fn new(repository: Arc<DuckDbRepository>, treeline_dir: PathBuf) -> Self {
         let tag_service = TagService::new(repository.clone());
-        Self { repository, tag_service, treeline_dir }
+        Self {
+            repository,
+            tag_service,
+            treeline_dir,
+        }
     }
 
     /// List saved import profiles
@@ -89,14 +93,13 @@ impl ImportService {
             anyhow::bail!("Account not found: {}", account_id);
         }
 
-        let account_uuid = Uuid::parse_str(account_id)
-            .context("Invalid account ID")?;
+        let account_uuid = Uuid::parse_str(account_id).context("Invalid account ID")?;
 
         // Read CSV with optional row skipping
         let (headers, records) = if options.skip_rows > 0 {
             // Use raw reader to skip rows before header
-            use std::io::{BufRead, BufReader};
             use std::fs::File;
+            use std::io::{BufRead, BufReader};
 
             let file = File::open(file_path).context("Failed to open CSV file")?;
             let buf_reader = BufReader::new(file);
@@ -108,8 +111,14 @@ impl ImportService {
             }
 
             // Read header line
-            let header_line = lines.next()
-                .ok_or_else(|| anyhow::anyhow!("No header row found after skipping {} rows", options.skip_rows))?
+            let header_line = lines
+                .next()
+                .ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "No header row found after skipping {} rows",
+                        options.skip_rows
+                    )
+                })?
                 .context("Failed to read header line")?;
 
             // Detect delimiter (semicolon common in EU, comma in US)
@@ -130,20 +139,21 @@ impl ImportService {
                 .delimiter(delimiter)
                 .from_reader(header_line.as_bytes());
 
-            let header_record = header_reader.records().next()
+            let header_record = header_reader
+                .records()
+                .next()
                 .ok_or_else(|| anyhow::anyhow!("Empty header line"))?
                 .context("Failed to parse header line")?;
 
             // Clean headers: trim and strip # prefix
-            let headers: Vec<String> = header_record.iter()
+            let headers: Vec<String> = header_record
+                .iter()
                 .map(|h| h.trim().trim_start_matches('#').to_string())
                 .collect();
 
             // Collect remaining lines as data
-            let remaining_content: String = lines
-                .filter_map(|l| l.ok())
-                .collect::<Vec<_>>()
-                .join("\n");
+            let remaining_content: String =
+                lines.filter_map(|l| l.ok()).collect::<Vec<_>>().join("\n");
 
             // Parse remaining content as CSV records with same delimiter
             let mut data_reader = csv::ReaderBuilder::new()
@@ -151,51 +161,63 @@ impl ImportService {
                 .delimiter(delimiter)
                 .from_reader(remaining_content.as_bytes());
 
-            let records: Vec<csv::StringRecord> = data_reader.records()
-                .filter_map(|r| r.ok())
-                .collect();
+            let records: Vec<csv::StringRecord> =
+                data_reader.records().filter_map(|r| r.ok()).collect();
 
             (headers, records)
         } else {
             // Standard path: first row is header
-            let mut reader = csv::Reader::from_path(file_path)
-                .context("Failed to read CSV file")?;
+            let mut reader =
+                csv::Reader::from_path(file_path).context("Failed to read CSV file")?;
 
             // Clean headers: trim and strip # prefix
-            let headers: Vec<String> = reader.headers()?
+            let headers: Vec<String> = reader
+                .headers()?
                 .iter()
                 .map(|h| h.trim().trim_start_matches('#').to_string())
                 .collect();
 
-            let records: Vec<csv::StringRecord> = reader.records()
-                .filter_map(|r| r.ok())
-                .collect();
+            let records: Vec<csv::StringRecord> = reader.records().filter_map(|r| r.ok()).collect();
 
             (headers, records)
         };
 
         // Find column indices
-        let date_idx = headers.iter().position(|h| h == mappings.date.as_str())
+        let date_idx = headers
+            .iter()
+            .position(|h| h == mappings.date.as_str())
             .context(format!("Date column '{}' not found", mappings.date))?;
 
         // Check for debit/credit columns first, fall back to amount
-        let debit_idx = mappings.debit.as_ref()
+        let debit_idx = mappings
+            .debit
+            .as_ref()
             .and_then(|d| headers.iter().position(|h| h == d.as_str()));
-        let credit_idx = mappings.credit.as_ref()
+        let credit_idx = mappings
+            .credit
+            .as_ref()
             .and_then(|c| headers.iter().position(|h| h == c.as_str()));
 
         let amount_idx = if debit_idx.is_some() || credit_idx.is_some() {
             None
         } else {
-            Some(headers.iter().position(|h| h == mappings.amount.as_str())
-                .context(format!("Amount column '{}' not found", mappings.amount))?)
+            Some(
+                headers
+                    .iter()
+                    .position(|h| h == mappings.amount.as_str())
+                    .context(format!("Amount column '{}' not found", mappings.amount))?,
+            )
         };
 
-        let desc_idx = mappings.description.as_ref()
+        let desc_idx = mappings
+            .description
+            .as_ref()
             .and_then(|d| headers.iter().position(|h| h == d.as_str()));
 
         // Optional balance column for running balance snapshots
-        let balance_idx = mappings.balance.as_ref()
+        let balance_idx = mappings
+            .balance
+            .as_ref()
             .and_then(|b| headers.iter().position(|h| h == b.as_str()));
 
         let mut transactions = Vec::new();
@@ -206,7 +228,6 @@ impl ImportService {
         let mut preview_balances: Vec<Option<String>> = Vec::new();
 
         for record in &records {
-
             // Parse date
             let date_str = record.get(date_idx).unwrap_or("");
             let date = parse_date(date_str);
@@ -223,18 +244,30 @@ impl ImportService {
             } else {
                 // Handle debit/credit columns
                 // Preserve sign from CSV, only negate if debit_negative option is set
-                let debit = debit_idx
-                    .and_then(|i| record.get(i))
-                    .and_then(|s| if s.is_empty() { None } else { parse_amount_with_format(s, options.number_format) });
-                let credit = credit_idx
-                    .and_then(|i| record.get(i))
-                    .and_then(|s| if s.is_empty() { None } else { parse_amount_with_format(s, options.number_format) });
+                let debit = debit_idx.and_then(|i| record.get(i)).and_then(|s| {
+                    if s.is_empty() {
+                        None
+                    } else {
+                        parse_amount_with_format(s, options.number_format)
+                    }
+                });
+                let credit = credit_idx.and_then(|i| record.get(i)).and_then(|s| {
+                    if s.is_empty() {
+                        None
+                    } else {
+                        parse_amount_with_format(s, options.number_format)
+                    }
+                });
 
                 match (debit, credit) {
                     (Some(d), None) => {
                         // Debit: preserve sign from CSV by default
                         // If debit_negative is true, negate positive values (for unsigned CSVs)
-                        let d = if options.debit_negative && d > Decimal::ZERO { -d } else { d };
+                        let d = if options.debit_negative && d > Decimal::ZERO {
+                            -d
+                        } else {
+                            d
+                        };
                         Some(d)
                     }
                     (None, Some(c)) => {
@@ -244,7 +277,11 @@ impl ImportService {
                     (Some(d), Some(c)) => {
                         // Both present: use the one with larger absolute value
                         if d.abs() >= c.abs() {
-                            let d = if options.debit_negative && d > Decimal::ZERO { -d } else { d };
+                            let d = if options.debit_negative && d > Decimal::ZERO {
+                                -d
+                            } else {
+                                d
+                            };
                             Some(d)
                         } else {
                             Some(c)
@@ -267,12 +304,11 @@ impl ImportService {
             }
 
             // Get description
-            let description = desc_idx
-                .and_then(|i| record.get(i))
-                .map(|s| s.to_string());
+            let description = desc_idx.and_then(|i| record.get(i)).map(|s| s.to_string());
 
             // Generate fingerprint for deduplication
-            let fingerprint = generate_fingerprint(account_id, &date, &amount, description.as_deref());
+            let fingerprint =
+                generate_fingerprint(account_id, &date, &amount, description.as_deref());
 
             let mut tx = Transaction::new(Uuid::new_v4(), account_uuid, amount, date);
             tx.description = description;
@@ -286,7 +322,9 @@ impl ImportService {
             // Also capture raw balance for preview display
             let row_balance = if let Some(bal_idx) = balance_idx {
                 if let Some(balance_str) = record.get(bal_idx) {
-                    if let Some(balance) = parse_amount_with_format(balance_str, options.number_format) {
+                    if let Some(balance) =
+                        parse_amount_with_format(balance_str, options.number_format)
+                    {
                         // Overwrite - we want the last balance for each date in CSV order
                         end_of_day_balances.insert(date, balance);
                         Some(balance.to_string())
@@ -324,9 +362,8 @@ impl ImportService {
                 // This shows the balance AFTER each transaction
 
                 // Get unique dates, sorted
-                let mut unique_dates: Vec<NaiveDate> = transactions.iter()
-                    .map(|t| t.transaction_date)
-                    .collect();
+                let mut unique_dates: Vec<NaiveDate> =
+                    transactions.iter().map(|t| t.transaction_date).collect();
                 unique_dates.sort();
                 unique_dates.dedup();
 
@@ -342,7 +379,8 @@ impl ImportService {
                     }
 
                     // Sum of transactions on this date
-                    let day_sum: Decimal = transactions.iter()
+                    let day_sum: Decimal = transactions
+                        .iter()
                         .filter(|t| t.transaction_date == *date)
                         .map(|t| t.amount)
                         .sum();
@@ -390,18 +428,23 @@ impl ImportService {
                 discovered,
                 imported: 0, // Not importing in preview
                 skipped: skipped as i64,
-                fingerprints_checked: 0, // Not checking in preview
+                fingerprints_checked: 0,      // Not checking in preview
                 balance_snapshots_created: 0, // Not creating in preview
                 preview: true,
-                transactions: Some(sorted_indices.iter().map(|&i| {
-                    let t = &transactions[i];
-                    TransactionPreview {
-                        date: t.transaction_date.to_string(),
-                        amount: t.amount.to_string(),
-                        description: t.description.clone(),
-                        balance: final_preview_balances.get(i).cloned().flatten(),
-                    }
-                }).collect()),
+                transactions: Some(
+                    sorted_indices
+                        .iter()
+                        .map(|&i| {
+                            let t = &transactions[i];
+                            TransactionPreview {
+                                date: t.transaction_date.to_string(),
+                                amount: t.amount.to_string(),
+                                description: t.description.clone(),
+                                balance: final_preview_balances.get(i).cloned().flatten(),
+                            }
+                        })
+                        .collect(),
+                ),
             });
         }
 
@@ -412,7 +455,10 @@ impl ImportService {
         for tx in transactions {
             if let Some(fp) = tx.csv_fingerprint.as_ref() {
                 // Check csv_fingerprint column for existing transactions
-                if self.repository.csv_fingerprint_exists_in_other_batches(fp, "")? {
+                if self
+                    .repository
+                    .csv_fingerprint_exists_in_other_batches(fp, "")?
+                {
                     duplicate_count += 1;
                     continue;
                 }
@@ -456,8 +502,8 @@ impl ImportService {
 
                 // Check for duplicate: same account + date + balance (within 0.01)
                 let is_duplicate = existing_snapshots.iter().any(|s| {
-                    s.snapshot_time.date() == *date &&
-                    (s.balance - *balance).abs() < Decimal::new(1, 2)
+                    s.snapshot_time.date() == *date
+                        && (s.balance - *balance).abs() < Decimal::new(1, 2)
                 });
 
                 if is_duplicate {
@@ -494,17 +540,25 @@ impl ImportService {
     }
 
     /// Save an import profile
-    pub fn save_profile(&self, name: &str, mappings: &ColumnMappings, options: &ImportOptions) -> Result<()> {
+    pub fn save_profile(
+        &self,
+        name: &str,
+        mappings: &ColumnMappings,
+        options: &ImportOptions,
+    ) -> Result<()> {
         let mut config = Config::load(&self.treeline_dir)?;
-        config.import_profiles.insert(name.to_string(), ImportProfile {
-            column_mappings: mappings.clone(),
-            date_format: None,
-            skip_rows: 0,
-            options: ConfigImportOptions {
-                flip_signs: options.flip_signs,
-                debit_negative: options.debit_negative,
+        config.import_profiles.insert(
+            name.to_string(),
+            ImportProfile {
+                column_mappings: mappings.clone(),
+                date_format: None,
+                skip_rows: 0,
+                options: ConfigImportOptions {
+                    flip_signs: options.flip_signs,
+                    debit_negative: options.debit_negative,
+                },
             },
-        });
+        );
         config.save(&self.treeline_dir)?;
         Ok(())
     }
@@ -520,16 +574,29 @@ impl ImportService {
     /// Returns best-guess mapping for date, amount, description, and optionally debit/credit columns.
     /// Matches Python CLI behavior with same pattern matching.
     pub fn detect_columns(&self, file_path: &Path) -> Result<DetectedColumns> {
-        let mut reader = csv::Reader::from_path(file_path)
-            .context("Failed to read CSV file")?;
+        let mut reader = csv::Reader::from_path(file_path).context("Failed to read CSV file")?;
 
-        let headers: Vec<String> = reader.headers()?
-            .iter()
-            .map(|h| h.to_string())
-            .collect();
+        let headers: Vec<String> = reader.headers()?.iter().map(|h| h.to_string()).collect();
 
-        let date_patterns = ["date", "transaction date", "trans date", "txn date", "txndate", "posted", "post date", "dt"];
-        let desc_patterns = ["description", "desc", "memo", "payee", "merchant", "details", "narration"];
+        let date_patterns = [
+            "date",
+            "transaction date",
+            "trans date",
+            "txn date",
+            "txndate",
+            "posted",
+            "post date",
+            "dt",
+        ];
+        let desc_patterns = [
+            "description",
+            "desc",
+            "memo",
+            "payee",
+            "merchant",
+            "details",
+            "narration",
+        ];
         let amount_patterns = ["amount", "amt", "total", "transaction amount"];
         let debit_patterns = ["debit", "dr", "withdrawal", "debit amount"];
         let credit_patterns = ["credit", "cr", "deposit", "credit amount"];
@@ -602,12 +669,7 @@ impl ImportService {
 fn parse_date(s: &str) -> Option<NaiveDate> {
     // Try common formats
     let formats = [
-        "%Y-%m-%d",
-        "%m/%d/%Y",
-        "%d/%m/%Y",
-        "%m-%d-%Y",
-        "%d-%m-%Y",
-        "%Y/%m/%d",
+        "%Y-%m-%d", "%m/%d/%Y", "%d/%m/%Y", "%m-%d-%Y", "%d-%m-%Y", "%Y/%m/%d",
     ];
 
     for fmt in &formats {
@@ -621,8 +683,8 @@ fn parse_date(s: &str) -> Option<NaiveDate> {
 /// Strip currency suffix from amount string (e.g., "100.50 PLN" -> "100.50")
 fn strip_currency_suffix(s: &str) -> &str {
     const CURRENCIES: &[&str] = &[
-        "PLN", "EUR", "USD", "GBP", "CHF", "CZK", "SEK", "NOK", "DKK",
-        "CAD", "AUD", "JPY", "CNY", "INR", "BRL", "MXN", "KRW", "RUB",
+        "PLN", "EUR", "USD", "GBP", "CHF", "CZK", "SEK", "NOK", "DKK", "CAD", "AUD", "JPY", "CNY",
+        "INR", "BRL", "MXN", "KRW", "RUB",
     ];
     let s = s.trim();
     for currency in CURRENCIES {
@@ -648,7 +710,7 @@ fn parse_amount_with_format(s: &str, format: NumberFormat) -> Option<Decimal> {
 
     // Handle parentheses notation for negative numbers: (100.00) -> -100.00
     let (is_negative, s) = if s.starts_with('(') && s.ends_with(')') {
-        (true, &s[1..s.len()-1])
+        (true, &s[1..s.len() - 1])
     } else {
         (false, s)
     };
@@ -670,7 +732,8 @@ fn parse_amount_with_format(s: &str, format: NumberFormat) -> Option<Decimal> {
     };
 
     // Keep only digits, dot, minus
-    let cleaned: String = normalized.chars()
+    let cleaned: String = normalized
+        .chars()
         .filter(|c| c.is_ascii_digit() || *c == '.' || *c == '-')
         .collect();
 
@@ -690,18 +753,17 @@ fn parse_amount_with_format(s: &str, format: NumberFormat) -> Option<Decimal> {
 
 /// Generate a fingerprint for transaction deduplication
 /// Based on account_id, date, amount, and normalized description
-fn generate_fingerprint(account_id: &str, date: &NaiveDate, amount: &Decimal, description: Option<&str>) -> String {
+fn generate_fingerprint(
+    account_id: &str,
+    date: &NaiveDate,
+    amount: &Decimal,
+    description: Option<&str>,
+) -> String {
     let normalized_desc = description
         .map(|d| normalize_description(d))
         .unwrap_or_default();
 
-    let fingerprint_input = format!(
-        "{}|{}|{:.2}|{}",
-        account_id,
-        date,
-        amount,
-        normalized_desc
-    );
+    let fingerprint_input = format!("{}|{}|{:.2}|{}", account_id, date, amount, normalized_desc);
 
     let mut hasher = Sha256::new();
     hasher.update(fingerprint_input.as_bytes());
@@ -887,16 +949,22 @@ mod tests {
     fn test_parse_amount_european_format_comma_decimal() {
         // EU format: 1.234,56 (dot=thousands, comma=decimal)
         let result = parse_amount_with_format("1.234,56", NumberFormat::Eu);
-        assert_eq!(result, Some(Decimal::new(123456, 2)),
-            "EU format 1.234,56 should parse as 1234.56");
+        assert_eq!(
+            result,
+            Some(Decimal::new(123456, 2)),
+            "EU format 1.234,56 should parse as 1234.56"
+        );
     }
 
     #[test]
     fn test_parse_amount_european_space_thousands() {
         // EU format with space thousands: 8 019,40 PLN
         let result = parse_amount_with_format("8 019,40 PLN", NumberFormat::EuSpace);
-        assert_eq!(result, Some(Decimal::new(801940, 2)),
-            "EU format '8 019,40 PLN' should parse as 8019.40");
+        assert_eq!(
+            result,
+            Some(Decimal::new(801940, 2)),
+            "EU format '8 019,40 PLN' should parse as 8019.40"
+        );
     }
 
     #[test]
@@ -904,16 +972,22 @@ mod tests {
         // Amount with currency suffix (common in EU exports)
         // Now works with any format because currency stripping is format-independent
         let result = parse_amount_with_format("100,50 EUR", NumberFormat::Eu);
-        assert_eq!(result, Some(Decimal::new(10050, 2)),
-            "Amount with EUR suffix should parse correctly");
+        assert_eq!(
+            result,
+            Some(Decimal::new(10050, 2)),
+            "Amount with EUR suffix should parse correctly"
+        );
     }
 
     #[test]
     fn test_parse_amount_us_with_currency_suffix() {
         // US format with currency suffix
         let result = parse_amount("100.50 USD");
-        assert_eq!(result, Some(Decimal::new(10050, 2)),
-            "US format with USD suffix should parse correctly");
+        assert_eq!(
+            result,
+            Some(Decimal::new(10050, 2)),
+            "US format with USD suffix should parse correctly"
+        );
     }
 
     #[test]

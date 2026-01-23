@@ -8,7 +8,9 @@ use std::sync::Arc;
 
 use anyhow::Result;
 
-use crate::adapters::demo::{generate_demo_accounts, generate_demo_transactions, generate_demo_balance_snapshots};
+use crate::adapters::demo::{
+    generate_demo_accounts, generate_demo_balance_snapshots, generate_demo_transactions,
+};
 use crate::adapters::duckdb::DuckDbRepository;
 use crate::config::Config;
 

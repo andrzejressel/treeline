@@ -15,9 +15,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
-use crate::domain::{Account, BalanceSnapshot, Transaction};
 use crate::domain::result::{Error as DomainError, Result as DomainResult};
-use crate::ports::{DataAggregationProvider, FetchAccountsResult, FetchTransactionsResult, IntegrationProvider};
+use crate::domain::{Account, BalanceSnapshot, Transaction};
+use crate::ports::{
+    DataAggregationProvider, FetchAccountsResult, FetchTransactionsResult, IntegrationProvider,
+};
 
 // =============================================================================
 // API Response Models (matching Lunchflow API spec)
@@ -74,7 +76,11 @@ struct TransactionsResponse {
 pub struct LunchflowTransaction {
     pub id: String,
     /// Account ID this transaction belongs to
-    #[serde(default, rename = "accountId", deserialize_with = "deserialize_optional_id")]
+    #[serde(
+        default,
+        rename = "accountId",
+        deserialize_with = "deserialize_optional_id"
+    )]
     pub account_id: Option<String>,
     /// Amount as number from API
     #[serde(deserialize_with = "deserialize_amount")]
@@ -129,11 +135,12 @@ where
     match value {
         JsonValue::Number(n) => {
             let s = n.to_string();
-            s.parse::<Decimal>().map_err(|e| D::Error::custom(format!("invalid decimal: {}", e)))
+            s.parse::<Decimal>()
+                .map_err(|e| D::Error::custom(format!("invalid decimal: {}", e)))
         }
-        JsonValue::String(s) => {
-            s.parse::<Decimal>().map_err(|e| D::Error::custom(format!("invalid decimal: {}", e)))
-        }
+        JsonValue::String(s) => s
+            .parse::<Decimal>()
+            .map_err(|e| D::Error::custom(format!("invalid decimal: {}", e))),
         _ => Err(D::Error::custom("expected number or string for amount")),
     }
 }
@@ -400,7 +407,10 @@ impl LunchflowClient {
             id: Uuid::new_v4(),
             name: lf_account.name.clone(),
             nickname: None,
-            currency: lf_account.currency.clone().unwrap_or_else(|| "USD".to_string()),
+            currency: lf_account
+                .currency
+                .clone()
+                .unwrap_or_else(|| "USD".to_string()),
             account_type: None, // Lunchflow doesn't provide account type
             classification,
             balance: None, // Will be set after fetching balance
@@ -472,6 +482,8 @@ impl LunchflowClient {
             csv_batch_id: None,
             // Manual flag
             is_manual: false,
+            // Auto-tag tracking (starts false, set true when rules apply)
+            tags_auto_applied: false,
             // SimpleFIN fields (not applicable)
             sf_id: None,
             sf_posted: None,
@@ -573,9 +585,7 @@ impl DataAggregationProvider for LunchflowProvider {
             })?;
 
         // Check for custom base URL (for testing with mock server)
-        let base_url = settings
-            .get("baseUrl")
-            .and_then(|v| v.as_str());
+        let base_url = settings.get("baseUrl").and_then(|v| v.as_str());
 
         let client = if let Some(url) = base_url {
             LunchflowClient::new_with_base_url(api_key, url)
@@ -610,9 +620,7 @@ impl DataAggregationProvider for LunchflowProvider {
             })?;
 
         // Check for custom base URL (for testing with mock server)
-        let base_url = settings
-            .get("baseUrl")
-            .and_then(|v| v.as_str());
+        let base_url = settings.get("baseUrl").and_then(|v| v.as_str());
 
         let client = if let Some(url) = base_url {
             LunchflowClient::new_with_base_url(api_key, url)
@@ -640,14 +648,15 @@ impl DataAggregationProvider for LunchflowProvider {
 
 impl IntegrationProvider for LunchflowProvider {
     fn setup(&self, options: &JsonValue) -> DomainResult<JsonValue> {
-        let api_key = options.get("apiKey").and_then(|v| v.as_str()).ok_or_else(|| {
-            DomainError::Config("Lunchflow apiKey required for setup".to_string())
-        })?;
+        let api_key = options
+            .get("apiKey")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| {
+                DomainError::Config("Lunchflow apiKey required for setup".to_string())
+            })?;
 
         // Check for custom base URL (for testing with mock server)
-        let base_url = options
-            .get("baseUrl")
-            .and_then(|v| v.as_str());
+        let base_url = options.get("baseUrl").and_then(|v| v.as_str());
 
         let client = if let Some(url) = base_url {
             LunchflowClient::new_with_base_url(api_key, url)
@@ -657,9 +666,9 @@ impl IntegrationProvider for LunchflowProvider {
         .map_err(|e| DomainError::Sync(e.to_string()))?;
 
         // Validate API key by fetching accounts
-        let _ = client
-            .get_accounts()
-            .map_err(|e| DomainError::Sync(format!("Failed to validate Lunchflow API key: {}", e)))?;
+        let _ = client.get_accounts().map_err(|e| {
+            DomainError::Sync(format!("Failed to validate Lunchflow API key: {}", e))
+        })?;
 
         // Build settings to store
         let mut settings = serde_json::json!({
@@ -833,7 +842,8 @@ mod tests {
 
     #[test]
     fn test_base_url_trailing_slash_trimmed() {
-        let client = LunchflowClient::new_with_base_url("test_key", "http://localhost/api/").unwrap();
+        let client =
+            LunchflowClient::new_with_base_url("test_key", "http://localhost/api/").unwrap();
         assert_eq!(client.base_url, "http://localhost/api");
     }
 }

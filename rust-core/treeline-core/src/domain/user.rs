@@ -9,7 +9,6 @@ pub struct User {
     pub email: String,
 }
 
-
 /// COMMENT: I think this User object was legacy from the Python
 /// CLI, and I don't think it's used at all. We should consider deleting
 /// altogether. Users don't have accounts with ids or emails.

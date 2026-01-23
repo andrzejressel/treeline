@@ -32,7 +32,11 @@ impl QueryService {
     /// Execute parameterized SQL (read or write)
     ///
     /// Parameters are passed as JSON values and bound to ? placeholders.
-    pub fn execute_sql_with_params(&self, sql: &str, params: &[serde_json::Value]) -> Result<QueryResult> {
+    pub fn execute_sql_with_params(
+        &self,
+        sql: &str,
+        params: &[serde_json::Value],
+    ) -> Result<QueryResult> {
         self.repository.execute_sql_with_params(sql, params)
     }
 }

@@ -3,30 +3,30 @@
 //! Services coordinate domain logic and port interactions. Each service
 //! focuses on a specific use case or feature area.
 
-mod status;
-mod sync;
-mod query;
-mod tag;
 mod backup;
+mod balance;
 mod compact;
-mod doctor;
 mod demo;
+mod doctor;
 pub mod encryption;
 pub mod import;
-mod balance;
-pub mod plugin;
 pub mod migration;
+pub mod plugin;
+mod query;
+mod status;
+mod sync;
+mod tag;
 
-pub use status::{StatusService, StatusSummary, AccountSummary, DateRange};
-pub use sync::SyncService;
-pub use query::QueryService;
-pub use tag::{TagService, TagResult, TagResultEntry, AutoTagResult};
 pub use backup::BackupService;
+pub use balance::{BackfillExecuteResult, BalanceService, BalanceSnapshotPreview};
 pub use compact::CompactService;
-pub use doctor::DoctorService;
 pub use demo::DemoService;
+pub use doctor::DoctorService;
 pub use encryption::EncryptionService;
-pub use import::{ImportService, ImportOptions, ImportResult, NumberFormat};
-pub use balance::{BalanceService, BalanceSnapshotPreview, BackfillExecuteResult};
-pub use plugin::{PluginService, PluginInfo, PluginManifest, PluginResult, UpdateInfo};
-pub use migration::{MigrationService, MigrationResult};
+pub use import::{ImportOptions, ImportResult, ImportService, NumberFormat};
+pub use migration::{MigrationResult, MigrationService};
+pub use plugin::{PluginInfo, PluginManifest, PluginResult, PluginService, UpdateInfo};
+pub use query::QueryService;
+pub use status::{AccountSummary, DateRange, StatusService, StatusSummary};
+pub use sync::SyncService;
+pub use tag::{AutoTagResult, TagResult, TagResultEntry, TagService};

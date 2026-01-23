@@ -7,7 +7,6 @@ mod data_provider;
 mod repository;
 
 pub use data_provider::{
-    DataAggregationProvider, IntegrationProvider,
-    FetchAccountsResult, FetchTransactionsResult,
+    DataAggregationProvider, FetchAccountsResult, FetchTransactionsResult, IntegrationProvider,
 };
 pub use repository::Repository;

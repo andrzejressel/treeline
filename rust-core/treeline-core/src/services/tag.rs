@@ -54,7 +54,10 @@ impl TagService {
             }
 
             // Find which transactions match this rule's condition
-            let matching_tx_ids = match self.repository.get_transactions_matching_rule(tx_ids, &rule.sql_condition) {
+            let matching_tx_ids = match self
+                .repository
+                .get_transactions_matching_rule(tx_ids, &rule.sql_condition)
+            {
                 Ok(ids) => ids,
                 Err(_) => {
                     // Rule condition failed (invalid SQL?) - skip this rule and continue
@@ -83,9 +86,10 @@ impl TagService {
                         }
                     }
 
-                    // Update if we added new tags
+                    // Update if we added new tags (and mark as auto-applied)
                     if changed {
-                        self.repository.update_transaction_tags(&tx_id.to_string(), &tags)?;
+                        self.repository
+                            .update_transaction_tags_auto(&tx_id.to_string(), &tags)?;
                         transactions_tagged_set.insert(*tx_id);
                     }
                 }
@@ -100,7 +104,12 @@ impl TagService {
     }
 
     /// Apply tags to transactions
-    pub fn apply_tags(&self, tx_ids: &[String], tags: &[String], replace: bool) -> Result<TagResult> {
+    pub fn apply_tags(
+        &self,
+        tx_ids: &[String],
+        tags: &[String],
+        replace: bool,
+    ) -> Result<TagResult> {
         let mut results = Vec::new();
         let mut succeeded = 0i64;
         let mut failed = 0i64;
@@ -135,7 +144,12 @@ impl TagService {
         })
     }
 
-    fn apply_tags_to_transaction(&self, tx_id: &str, new_tags: &[String], replace: bool) -> Result<Vec<String>> {
+    fn apply_tags_to_transaction(
+        &self,
+        tx_id: &str,
+        new_tags: &[String],
+        replace: bool,
+    ) -> Result<Vec<String>> {
         // Validate UUID format upfront (matches Python behavior)
         if Uuid::parse_str(tx_id).is_err() {
             anyhow::bail!("Invalid UUID: {}", tx_id);
@@ -158,7 +172,8 @@ impl TagService {
             }
         };
 
-        self.repository.update_transaction_tags(tx_id, &final_tags)?;
+        self.repository
+            .update_transaction_tags(tx_id, &final_tags)?;
         Ok(final_tags)
     }
 }

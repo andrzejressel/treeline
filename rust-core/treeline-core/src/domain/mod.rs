@@ -4,18 +4,18 @@
 //! with validation logic - no I/O or external dependencies.
 
 mod account;
-mod transaction;
-pub mod balance;
-mod user;
 mod backup;
+pub mod balance;
 mod encryption;
-mod rule;
 pub mod result;
+mod rule;
+mod transaction;
+mod user;
 
 pub use account::Account;
-pub use transaction::Transaction;
-pub use balance::BalanceSnapshot;
-pub use user::User;
 pub use backup::BackupMetadata;
+pub use balance::BalanceSnapshot;
 pub use encryption::{Argon2Params, EncryptionMetadata, EncryptionStatus};
 pub use rule::AutoTagRule;
+pub use transaction::Transaction;
+pub use user::User;

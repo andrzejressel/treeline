@@ -10,7 +10,6 @@ use crate::domain::{Account, BalanceSnapshot, Transaction};
 /// COMMENT: why is this the only "Port"?
 /// I would have expected every abstraction to be a "Port"
 
-
 /// Database repository abstraction
 ///
 /// This trait defines all database operations. Implementations (adapters)

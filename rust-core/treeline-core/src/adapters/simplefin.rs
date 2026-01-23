@@ -106,8 +106,7 @@ impl SimpleFINClient {
     /// Create a new SimpleFIN client from an access URL
     pub fn new(access_url: &str) -> Result<Self> {
         // Parse and validate access URL
-        let parsed = Url::parse(access_url)
-            .context("Invalid URL format")?;
+        let parsed = Url::parse(access_url).context("Invalid URL format")?;
 
         // Validate HTTPS
         if parsed.scheme() != "https" {
@@ -152,7 +151,8 @@ impl SimpleFINClient {
     pub fn get_accounts(&self) -> Result<SyncedAccounts> {
         let url = format!("{}/accounts", self.base_url);
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .basic_auth(&self.username, Some(&self.password))
             .send()
@@ -160,7 +160,8 @@ impl SimpleFINClient {
 
         self.check_response_status(&response)?;
 
-        let data: AccountsResponse = response.json()
+        let data: AccountsResponse = response
+            .json()
             .context("Failed to parse SimpleFIN response")?;
 
         let mut accounts = Vec::new();
@@ -173,7 +174,8 @@ impl SimpleFINClient {
             // Create balance snapshot if balance is available
             if let Some(balance_str) = &sf_account.balance {
                 if let Ok(balance) = balance_str.parse::<Decimal>() {
-                    let snapshot_time = sf_account.balance_date
+                    let snapshot_time = sf_account
+                        .balance_date
                         .map(|ts| Utc.timestamp_opt(ts, 0).single())
                         .flatten()
                         .unwrap_or_else(Utc::now)
@@ -211,10 +213,12 @@ impl SimpleFINClient {
         let mut url = format!("{}/accounts", self.base_url);
 
         // Add query parameters
-        let start_ts = start_date.and_hms_opt(0, 0, 0)
+        let start_ts = start_date
+            .and_hms_opt(0, 0, 0)
             .map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc).timestamp())
             .unwrap_or(0);
-        let end_ts = end_date.and_hms_opt(23, 59, 59)
+        let end_ts = end_date
+            .and_hms_opt(23, 59, 59)
             .map(|dt| DateTime::<Utc>::from_naive_utc_and_offset(dt, Utc).timestamp())
             .unwrap_or(0);
 
@@ -227,7 +231,8 @@ impl SimpleFINClient {
             }
         }
 
-        let response = self.client
+        let response = self
+            .client
             .get(&url)
             .basic_auth(&self.username, Some(&self.password))
             .send()
@@ -235,7 +240,8 @@ impl SimpleFINClient {
 
         self.check_response_status(&response)?;
 
-        let data: AccountsResponse = response.json()
+        let data: AccountsResponse = response
+            .json()
             .context("Failed to parse SimpleFIN response")?;
 
         let mut transactions = Vec::new();
@@ -257,7 +263,9 @@ impl SimpleFINClient {
     /// Map SimpleFIN account to domain Account
     fn map_account(&self, sf_account: &SimpleFINAccount) -> Account {
         // Parse balance if available
-        let balance = sf_account.balance.as_ref()
+        let balance = sf_account
+            .balance
+            .as_ref()
             .and_then(|b| b.parse::<Decimal>().ok());
 
         // Compute classification based on account_type
@@ -309,20 +317,24 @@ impl SimpleFINClient {
         let amount = sf_tx.amount.parse::<Decimal>().unwrap_or_default();
 
         // Convert timestamp to date
-        let posted_date = Utc.timestamp_opt(sf_tx.posted, 0)
+        let posted_date = Utc
+            .timestamp_opt(sf_tx.posted, 0)
             .single()
             .map(|dt| dt.naive_utc().date())
             .unwrap_or_else(|| Utc::now().naive_utc().date());
 
         // Extract category as tag if present
-        let tags = sf_tx.extra
+        let tags = sf_tx
+            .extra
             .as_ref()
             .and_then(|e| e.category.clone())
             .map(|c| vec![c])
             .unwrap_or_default();
 
         // Convert extra to JSON Value for storage
-        let sf_extra = sf_tx.extra.as_ref()
+        let sf_extra = sf_tx
+            .extra
+            .as_ref()
             .and_then(|e| serde_json::to_value(e).ok());
 
         let now = Utc::now();
@@ -343,6 +355,8 @@ impl SimpleFINClient {
             csv_batch_id: None,
             // Manual flag
             is_manual: false,
+            // Auto-tag tracking (starts false, set true when rules apply)
+            tags_auto_applied: false,
             // SimpleFIN: Store ALL raw fields from API
             sf_id: Some(sf_tx.id.clone()),
             sf_posted: Some(sf_tx.posted),
@@ -435,7 +449,9 @@ use base64::Engine;
 use serde_json::Value as JsonValue;
 
 use crate::domain::result::Result as DomainResult;
-use crate::ports::{DataAggregationProvider, IntegrationProvider, FetchAccountsResult, FetchTransactionsResult};
+use crate::ports::{
+    DataAggregationProvider, FetchAccountsResult, FetchTransactionsResult, IntegrationProvider,
+};
 
 /// SimpleFIN data provider
 ///
@@ -473,14 +489,20 @@ impl DataAggregationProvider for SimpleFINProvider {
     }
 
     fn get_accounts(&self, settings: &JsonValue) -> DomainResult<FetchAccountsResult> {
-        let access_url = settings.get("accessUrl")
+        let access_url = settings
+            .get("accessUrl")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| crate::domain::result::Error::Config("SimpleFIN accessUrl not found in settings".to_string()))?;
+            .ok_or_else(|| {
+                crate::domain::result::Error::Config(
+                    "SimpleFIN accessUrl not found in settings".to_string(),
+                )
+            })?;
 
         let client = SimpleFINClient::new(access_url)
             .map_err(|e| crate::domain::result::Error::Sync(e.to_string()))?;
 
-        let synced = client.get_accounts()
+        let synced = client
+            .get_accounts()
             .map_err(|e| crate::domain::result::Error::Sync(e.to_string()))?;
 
         Ok(FetchAccountsResult {
@@ -497,15 +519,25 @@ impl DataAggregationProvider for SimpleFINProvider {
         account_ids: &[String],
         settings: &JsonValue,
     ) -> DomainResult<FetchTransactionsResult> {
-        let access_url = settings.get("accessUrl")
+        let access_url = settings
+            .get("accessUrl")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| crate::domain::result::Error::Config("SimpleFIN accessUrl not found in settings".to_string()))?;
+            .ok_or_else(|| {
+                crate::domain::result::Error::Config(
+                    "SimpleFIN accessUrl not found in settings".to_string(),
+                )
+            })?;
 
         let client = SimpleFINClient::new(access_url)
             .map_err(|e| crate::domain::result::Error::Sync(e.to_string()))?;
 
-        let ids = if account_ids.is_empty() { None } else { Some(account_ids) };
-        let synced = client.get_transactions(start_date, end_date, ids)
+        let ids = if account_ids.is_empty() {
+            None
+        } else {
+            Some(account_ids)
+        };
+        let synced = client
+            .get_transactions(start_date, end_date, ids)
             .map_err(|e| crate::domain::result::Error::Sync(e.to_string()))?;
 
         Ok(FetchTransactionsResult {
@@ -517,37 +549,52 @@ impl DataAggregationProvider for SimpleFINProvider {
 
 impl IntegrationProvider for SimpleFINProvider {
     fn setup(&self, options: &JsonValue) -> DomainResult<JsonValue> {
-        let setup_token = options.get("setupToken")
+        let setup_token = options
+            .get("setupToken")
             .and_then(|v| v.as_str())
-            .ok_or_else(|| crate::domain::result::Error::Config("SimpleFIN setupToken not found in options".to_string()))?;
+            .ok_or_else(|| {
+                crate::domain::result::Error::Config(
+                    "SimpleFIN setupToken not found in options".to_string(),
+                )
+            })?;
 
         // Decode base64 setup token to get claim URL
         let decoded = base64::engine::general_purpose::STANDARD
             .decode(setup_token)
-            .map_err(|_| crate::domain::result::Error::Config("Invalid setup token format".to_string()))?;
+            .map_err(|_| {
+                crate::domain::result::Error::Config("Invalid setup token format".to_string())
+            })?;
 
-        let claim_url = String::from_utf8(decoded)
-            .map_err(|_| crate::domain::result::Error::Config("Invalid setup token encoding".to_string()))?;
+        let claim_url = String::from_utf8(decoded).map_err(|_| {
+            crate::domain::result::Error::Config("Invalid setup token encoding".to_string())
+        })?;
 
         // Claim the token to get access URL
         let client = reqwest::blocking::Client::builder()
             .timeout(std::time::Duration::from_secs(120))
             .build()
-            .map_err(|e| crate::domain::result::Error::Sync(format!("Failed to create HTTP client: {}", e)))?;
+            .map_err(|e| {
+                crate::domain::result::Error::Sync(format!("Failed to create HTTP client: {}", e))
+            })?;
 
-        let response = client.post(&claim_url)
-            .send()
-            .map_err(|e| crate::domain::result::Error::Sync(format!("Failed to claim SimpleFIN token: {}", e)))?;
+        let response = client.post(&claim_url).send().map_err(|e| {
+            crate::domain::result::Error::Sync(format!("Failed to claim SimpleFIN token: {}", e))
+        })?;
 
         if !response.status().is_success() {
-            return Err(crate::domain::result::Error::Sync("Failed to verify SimpleFIN token".to_string()));
+            return Err(crate::domain::result::Error::Sync(
+                "Failed to verify SimpleFIN token".to_string(),
+            ));
         }
 
-        let access_url = response.text()
-            .map_err(|e| crate::domain::result::Error::Sync(format!("Failed to read SimpleFIN response: {}", e)))?;
+        let access_url = response.text().map_err(|e| {
+            crate::domain::result::Error::Sync(format!("Failed to read SimpleFIN response: {}", e))
+        })?;
 
         if access_url.is_empty() {
-            return Err(crate::domain::result::Error::Sync("No access URL received from SimpleFIN".to_string()));
+            return Err(crate::domain::result::Error::Sync(
+                "No access URL received from SimpleFIN".to_string(),
+            ));
         }
 
         Ok(serde_json::json!({

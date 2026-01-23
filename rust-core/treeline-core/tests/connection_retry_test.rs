@@ -76,7 +76,10 @@ fn test_concurrent_connections() {
     println!("\nResults: {} successes, {} failures", successes, failures);
 
     // All should succeed (with retries)
-    assert_eq!(successes, 3, "All connections should succeed with retry logic");
+    assert_eq!(
+        successes, 3,
+        "All connections should succeed with retry logic"
+    );
     assert_eq!(failures, 0, "No connections should fail");
 }
 

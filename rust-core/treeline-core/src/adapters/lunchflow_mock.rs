@@ -184,7 +184,12 @@ fn handle_connection(mut stream: TcpStream, config: &MockConfig) {
         let parts: Vec<&str> = first_line.split_whitespace().collect();
 
         if parts.len() < 2 {
-            send_response(&mut stream, 400, "Bad Request", r#"{"error": "Invalid request"}"#);
+            send_response(
+                &mut stream,
+                400,
+                "Bad Request",
+                r#"{"error": "Invalid request"}"#,
+            );
             return;
         }
 
@@ -257,10 +262,8 @@ fn handle_connection(mut stream: TcpStream, config: &MockConfig) {
                 {
                     // Get transactions: GET /accounts/{id}/transactions
                     let account_id = extract_account_id(path_without_query);
-                    let txs = generate_mock_transactions(
-                        account_id,
-                        config.num_transactions_per_account,
-                    );
+                    let txs =
+                        generate_mock_transactions(account_id, config.num_transactions_per_account);
                     let response = TransactionsResponse {
                         total: txs.len(),
                         transactions: txs,
@@ -328,7 +331,10 @@ fn generate_mock_accounts(count: usize) -> Vec<MockAccount> {
                 id: (i + 1) as i64,
                 name: format!("{} Checking", inst),
                 institution_name: inst.to_string(),
-                institution_logo: Some(format!("https://logos.lunchflow.com/{}.png", inst.to_lowercase())),
+                institution_logo: Some(format!(
+                    "https://logos.lunchflow.com/{}.png",
+                    inst.to_lowercase()
+                )),
                 provider: provider.to_string(),
                 currency: currency.to_string(),
                 status: "ACTIVE".to_string(),

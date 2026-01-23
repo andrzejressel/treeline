@@ -5,8 +5,8 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use chrono::{NaiveDate, NaiveDateTime, NaiveTime, Utc};
-use rust_decimal::Decimal;
 use rust_decimal::prelude::ToPrimitive;
+use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -47,8 +47,8 @@ impl BalanceService {
         let snapshot_date = snapshot_time.date();
         let existing_snapshots = self.repository.get_balance_snapshots(Some(account_id))?;
         let has_same_balance = existing_snapshots.iter().any(|s| {
-            s.snapshot_time.date() == snapshot_date &&
-            (s.balance - balance).abs() < Decimal::new(1, 2) // Within 0.01
+            s.snapshot_time.date() == snapshot_date
+                && (s.balance - balance).abs() < Decimal::new(1, 2) // Within 0.01
         });
         if has_same_balance {
             anyhow::bail!(
@@ -122,10 +122,16 @@ impl BalanceService {
 
         // Group transactions by date and calculate daily totals
         let mut daily_totals: HashMap<NaiveDate, Decimal> = HashMap::new();
-        let mut transactions_by_date: HashMap<NaiveDate, Vec<&crate::domain::Transaction>> = HashMap::new();
+        let mut transactions_by_date: HashMap<NaiveDate, Vec<&crate::domain::Transaction>> =
+            HashMap::new();
         for tx in &transactions {
-            *daily_totals.entry(tx.transaction_date).or_insert(Decimal::ZERO) += tx.amount;
-            transactions_by_date.entry(tx.transaction_date).or_default().push(tx);
+            *daily_totals
+                .entry(tx.transaction_date)
+                .or_insert(Decimal::ZERO) += tx.amount;
+            transactions_by_date
+                .entry(tx.transaction_date)
+                .or_default()
+                .push(tx);
         }
 
         // Collect ALL dates we need to consider:
@@ -144,10 +150,8 @@ impl BalanceService {
         }
 
         // Sort descending (most recent first) for backwards calculation
-        let mut dates_for_calculation: Vec<NaiveDate> = all_dates
-            .into_iter()
-            .filter(|d| *d <= known_date)
-            .collect();
+        let mut dates_for_calculation: Vec<NaiveDate> =
+            all_dates.into_iter().filter(|d| *d <= known_date).collect();
         dates_for_calculation.sort_by(|a, b| b.cmp(a));
 
         // Calculate balances working backwards from known_date
@@ -222,7 +226,9 @@ impl BalanceService {
         end_date: Option<NaiveDate>,
     ) -> Result<BackfillExecuteResult> {
         // Verify account exists
-        let account = self.repository.get_account_by_id(account_id)?
+        let account = self
+            .repository
+            .get_account_by_id(account_id)?
             .ok_or_else(|| anyhow::anyhow!("Account not found: {}", account_id))?;
         let account_uuid = account.id;
 
@@ -238,7 +244,9 @@ impl BalanceService {
         // Aggregate transactions by date (sum amounts per day)
         let mut daily_totals: HashMap<NaiveDate, Decimal> = HashMap::new();
         for tx in &transactions {
-            *daily_totals.entry(tx.transaction_date).or_insert(Decimal::ZERO) += tx.amount;
+            *daily_totals
+                .entry(tx.transaction_date)
+                .or_insert(Decimal::ZERO) += tx.amount;
         }
 
         // Collect ALL dates we need to consider:
@@ -289,10 +297,8 @@ impl BalanceService {
 
         // Calculate balances working backwards from known_date
         // We need to iterate through ALL dates up to known_date to get correct running balance
-        let mut all_dates_sorted: Vec<NaiveDate> = all_dates
-            .into_iter()
-            .filter(|d| *d <= known_date)
-            .collect();
+        let mut all_dates_sorted: Vec<NaiveDate> =
+            all_dates.into_iter().filter(|d| *d <= known_date).collect();
         all_dates_sorted.sort_by(|a, b| b.cmp(a));
 
         let mut current_balance = known_balance;
@@ -330,7 +336,7 @@ impl BalanceService {
 
         Ok(BackfillExecuteResult {
             snapshots_created: created,
-            snapshots_updated: deleted as i64,  // "updated" now means "replaced/deleted"
+            snapshots_updated: deleted as i64, // "updated" now means "replaced/deleted"
             snapshots_skipped: 0,
         })
     }

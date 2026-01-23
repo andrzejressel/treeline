@@ -31,11 +31,14 @@ impl StatusService {
             total_snapshots: snapshot_count,
             total_integrations: integrations.len() as i64,
             integration_names: integrations.iter().map(|i| i.name.clone()).collect(),
-            accounts: accounts.into_iter().map(|a| AccountSummary {
-                id: a.id.to_string(),
-                name: a.name,
-                institution_name: a.institution_name,
-            }).collect(),
+            accounts: accounts
+                .into_iter()
+                .map(|a| AccountSummary {
+                    id: a.id.to_string(),
+                    name: a.name,
+                    institution_name: a.institution_name,
+                })
+                .collect(),
             date_range,
         })
     }

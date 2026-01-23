@@ -7,11 +7,11 @@
 
 use std::f64::consts::PI;
 
-use chrono::{Datelike, NaiveDate, Utc, Duration};
+use chrono::{Datelike, Duration, NaiveDate, Utc};
 use rust_decimal::Decimal;
 use uuid::Uuid;
 
-use crate::domain::{Account, Transaction, BalanceSnapshot};
+use crate::domain::{Account, BalanceSnapshot, Transaction};
 
 /// Generate demo accounts
 pub fn generate_demo_accounts() -> Vec<Account> {
@@ -33,10 +33,23 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             updated_at: now,
             // Demo accounts are identified by name for deduplication
             is_manual: false,
-            sf_id: None, sf_name: None, sf_currency: None, sf_balance: None, sf_available_balance: None,
-            sf_balance_date: None, sf_org_name: None, sf_org_url: None, sf_org_domain: None, sf_extra: None,
-            lf_id: None, lf_name: None, lf_institution_name: None, lf_institution_logo: None,
-            lf_provider: None, lf_currency: None, lf_status: None,
+            sf_id: None,
+            sf_name: None,
+            sf_currency: None,
+            sf_balance: None,
+            sf_available_balance: None,
+            sf_balance_date: None,
+            sf_org_name: None,
+            sf_org_url: None,
+            sf_org_domain: None,
+            sf_extra: None,
+            lf_id: None,
+            lf_name: None,
+            lf_institution_name: None,
+            lf_institution_logo: None,
+            lf_provider: None,
+            lf_currency: None,
+            lf_status: None,
         },
         Account {
             id: Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap(),
@@ -52,10 +65,23 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             created_at: now,
             updated_at: now,
             is_manual: false,
-            sf_id: None, sf_name: None, sf_currency: None, sf_balance: None, sf_available_balance: None,
-            sf_balance_date: None, sf_org_name: None, sf_org_url: None, sf_org_domain: None, sf_extra: None,
-            lf_id: None, lf_name: None, lf_institution_name: None, lf_institution_logo: None,
-            lf_provider: None, lf_currency: None, lf_status: None,
+            sf_id: None,
+            sf_name: None,
+            sf_currency: None,
+            sf_balance: None,
+            sf_available_balance: None,
+            sf_balance_date: None,
+            sf_org_name: None,
+            sf_org_url: None,
+            sf_org_domain: None,
+            sf_extra: None,
+            lf_id: None,
+            lf_name: None,
+            lf_institution_name: None,
+            lf_institution_logo: None,
+            lf_provider: None,
+            lf_currency: None,
+            lf_status: None,
         },
         Account {
             id: Uuid::parse_str("33333333-3333-3333-3333-333333333333").unwrap(),
@@ -71,10 +97,23 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             created_at: now,
             updated_at: now,
             is_manual: false,
-            sf_id: None, sf_name: None, sf_currency: None, sf_balance: None, sf_available_balance: None,
-            sf_balance_date: None, sf_org_name: None, sf_org_url: None, sf_org_domain: None, sf_extra: None,
-            lf_id: None, lf_name: None, lf_institution_name: None, lf_institution_logo: None,
-            lf_provider: None, lf_currency: None, lf_status: None,
+            sf_id: None,
+            sf_name: None,
+            sf_currency: None,
+            sf_balance: None,
+            sf_available_balance: None,
+            sf_balance_date: None,
+            sf_org_name: None,
+            sf_org_url: None,
+            sf_org_domain: None,
+            sf_extra: None,
+            lf_id: None,
+            lf_name: None,
+            lf_institution_name: None,
+            lf_institution_logo: None,
+            lf_provider: None,
+            lf_currency: None,
+            lf_status: None,
         },
         Account {
             id: Uuid::parse_str("44444444-4444-4444-4444-444444444444").unwrap(),
@@ -90,10 +129,23 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             created_at: now,
             updated_at: now,
             is_manual: false,
-            sf_id: None, sf_name: None, sf_currency: None, sf_balance: None, sf_available_balance: None,
-            sf_balance_date: None, sf_org_name: None, sf_org_url: None, sf_org_domain: None, sf_extra: None,
-            lf_id: None, lf_name: None, lf_institution_name: None, lf_institution_logo: None,
-            lf_provider: None, lf_currency: None, lf_status: None,
+            sf_id: None,
+            sf_name: None,
+            sf_currency: None,
+            sf_balance: None,
+            sf_available_balance: None,
+            sf_balance_date: None,
+            sf_org_name: None,
+            sf_org_url: None,
+            sf_org_domain: None,
+            sf_extra: None,
+            lf_id: None,
+            lf_name: None,
+            lf_institution_name: None,
+            lf_institution_logo: None,
+            lf_provider: None,
+            lf_currency: None,
+            lf_status: None,
         },
         Account {
             id: Uuid::parse_str("55555555-5555-5555-5555-555555555555").unwrap(),
@@ -109,10 +161,23 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             created_at: now,
             updated_at: now,
             is_manual: false,
-            sf_id: None, sf_name: None, sf_currency: None, sf_balance: None, sf_available_balance: None,
-            sf_balance_date: None, sf_org_name: None, sf_org_url: None, sf_org_domain: None, sf_extra: None,
-            lf_id: None, lf_name: None, lf_institution_name: None, lf_institution_logo: None,
-            lf_provider: None, lf_currency: None, lf_status: None,
+            sf_id: None,
+            sf_name: None,
+            sf_currency: None,
+            sf_balance: None,
+            sf_available_balance: None,
+            sf_balance_date: None,
+            sf_org_name: None,
+            sf_org_url: None,
+            sf_org_domain: None,
+            sf_extra: None,
+            lf_id: None,
+            lf_name: None,
+            lf_institution_name: None,
+            lf_institution_logo: None,
+            lf_provider: None,
+            lf_currency: None,
+            lf_status: None,
         },
         Account {
             id: Uuid::parse_str("66666666-6666-6666-6666-666666666666").unwrap(),
@@ -128,10 +193,23 @@ pub fn generate_demo_accounts() -> Vec<Account> {
             created_at: now,
             updated_at: now,
             is_manual: false,
-            sf_id: None, sf_name: None, sf_currency: None, sf_balance: None, sf_available_balance: None,
-            sf_balance_date: None, sf_org_name: None, sf_org_url: None, sf_org_domain: None, sf_extra: None,
-            lf_id: None, lf_name: None, lf_institution_name: None, lf_institution_logo: None,
-            lf_provider: None, lf_currency: None, lf_status: None,
+            sf_id: None,
+            sf_name: None,
+            sf_currency: None,
+            sf_balance: None,
+            sf_available_balance: None,
+            sf_balance_date: None,
+            sf_org_name: None,
+            sf_org_url: None,
+            sf_org_domain: None,
+            sf_extra: None,
+            lf_id: None,
+            lf_name: None,
+            lf_institution_name: None,
+            lf_institution_logo: None,
+            lf_provider: None,
+            lf_currency: None,
+            lf_status: None,
         },
     ]
 }
@@ -395,7 +473,10 @@ impl SimpleRng {
 
     fn next(&mut self) -> f64 {
         // Linear congruential generator
-        self.state = self.state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+        self.state = self
+            .state
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
         // Convert to 0.0-1.0 range
         (self.state >> 32) as f64 / u32::MAX as f64
     }
@@ -408,12 +489,42 @@ pub fn generate_demo_balance_snapshots() -> Vec<BalanceSnapshot> {
 
     // Account configurations: (uuid, current_balance, balance_type, volatility)
     let account_configs = [
-        ("11111111-1111-1111-1111-111111111111", 4823.47_f64, "checking", 0.02),
-        ("22222222-2222-2222-2222-222222222222", 18750.00, "savings", 0.01),
-        ("33333333-3333-3333-3333-333333333333", -2847.63, "credit_chase", 0.15),
-        ("44444444-4444-4444-4444-444444444444", -1245.89, "credit_citi", 0.12),
-        ("55555555-5555-5555-5555-555555555555", 47823.15, "market", 0.08),
-        ("66666666-6666-6666-6666-666666666666", 89432.67, "market", 0.06),
+        (
+            "11111111-1111-1111-1111-111111111111",
+            4823.47_f64,
+            "checking",
+            0.02,
+        ),
+        (
+            "22222222-2222-2222-2222-222222222222",
+            18750.00,
+            "savings",
+            0.01,
+        ),
+        (
+            "33333333-3333-3333-3333-333333333333",
+            -2847.63,
+            "credit_chase",
+            0.15,
+        ),
+        (
+            "44444444-4444-4444-4444-444444444444",
+            -1245.89,
+            "credit_citi",
+            0.12,
+        ),
+        (
+            "55555555-5555-5555-5555-555555555555",
+            47823.15,
+            "market",
+            0.08,
+        ),
+        (
+            "66666666-6666-6666-6666-666666666666",
+            89432.67,
+            "market",
+            0.06,
+        ),
     ];
 
     let mut snapshots = Vec::new();
@@ -518,8 +629,10 @@ pub fn generate_demo_balance_snapshots() -> Vec<BalanceSnapshot> {
 // DemoDataProvider - implements DataAggregationProvider trait
 // =============================================================================
 
-use crate::ports::{DataAggregationProvider, IntegrationProvider, FetchAccountsResult, FetchTransactionsResult};
 use crate::domain::result::Result;
+use crate::ports::{
+    DataAggregationProvider, FetchAccountsResult, FetchTransactionsResult, IntegrationProvider,
+};
 use serde_json::Value as JsonValue;
 
 /// Demo data provider
@@ -577,10 +690,8 @@ impl DataAggregationProvider for DemoDataProvider {
         // Convert to (provider_account_id, Transaction) pairs
         // For demo mode, we use account name as the provider ID (matched in sync service)
         let accounts = generate_demo_accounts();
-        let account_id_to_name: std::collections::HashMap<Uuid, String> = accounts
-            .into_iter()
-            .map(|a| (a.id, a.name))
-            .collect();
+        let account_id_to_name: std::collections::HashMap<Uuid, String> =
+            accounts.into_iter().map(|a| (a.id, a.name)).collect();
 
         let txs_with_ids: Vec<(String, Transaction)> = transactions
             .into_iter()

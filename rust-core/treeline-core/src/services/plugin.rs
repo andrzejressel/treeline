@@ -21,9 +21,12 @@ mod embedded_template {
     pub const SVELTE_CONFIG_JS: &str = include_str!("../../../../plugin-template/svelte.config.js");
     pub const GITIGNORE: &str = include_str!("../../../../plugin-template/.gitignore");
     pub const SRC_INDEX_TS: &str = include_str!("../../../../plugin-template/src/index.ts");
-    pub const SRC_VIEW_SVELTE: &str = include_str!("../../../../plugin-template/src/HelloWorldView.svelte");
-    pub const SCRIPTS_RELEASE_SH: &str = include_str!("../../../../plugin-template/scripts/release.sh");
-    pub const GITHUB_WORKFLOW: &str = include_str!("../../../../plugin-template/.github/workflows/release.yml");
+    pub const SRC_VIEW_SVELTE: &str =
+        include_str!("../../../../plugin-template/src/HelloWorldView.svelte");
+    pub const SCRIPTS_RELEASE_SH: &str =
+        include_str!("../../../../plugin-template/scripts/release.sh");
+    pub const GITHUB_WORKFLOW: &str =
+        include_str!("../../../../plugin-template/.github/workflows/release.yml");
 }
 
 /// Plugin service for managing external plugins
@@ -88,22 +91,32 @@ impl PluginService {
     /// Create a new plugin from embedded template
     pub fn create_plugin(&self, name: &str, target_dir: Option<&Path>) -> Result<PluginResult> {
         // Validate name
-        let valid_name = name.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_');
+        let valid_name = name
+            .chars()
+            .all(|c| c.is_alphanumeric() || c == '-' || c == '_');
         if name.is_empty() || !valid_name {
             return Ok(PluginResult {
                 success: false,
-                error: Some("Plugin name must contain only letters, numbers, hyphens, and underscores".to_string()),
+                error: Some(
+                    "Plugin name must contain only letters, numbers, hyphens, and underscores"
+                        .to_string(),
+                ),
                 ..Default::default()
             });
         }
 
-        let target = target_dir.map(PathBuf::from).unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
+        let target = target_dir
+            .map(PathBuf::from)
+            .unwrap_or_else(|| std::env::current_dir().unwrap_or_default());
         let plugin_dir = target.join(name);
 
         if plugin_dir.exists() {
             return Ok(PluginResult {
                 success: false,
-                error: Some(format!("Directory already exists: {}", plugin_dir.display())),
+                error: Some(format!(
+                    "Directory already exists: {}",
+                    plugin_dir.display()
+                )),
                 ..Default::default()
             });
         }
@@ -117,7 +130,8 @@ impl PluginService {
         // Compute plugin names
         let table_safe_name = name.replace('-', "_");
         let display_name = name.replace('-', " ").replace('_', " ");
-        let display_name: String = display_name.split_whitespace()
+        let display_name: String = display_name
+            .split_whitespace()
             .map(|word| {
                 let mut chars = word.chars();
                 match chars.next() {
@@ -129,24 +143,49 @@ impl PluginService {
             .join(" ");
 
         // Write template files with customized manifest
-        let mut manifest: serde_json::Value = serde_json::from_str(embedded_template::MANIFEST_JSON)?;
+        let mut manifest: serde_json::Value =
+            serde_json::from_str(embedded_template::MANIFEST_JSON)?;
         manifest["id"] = serde_json::Value::String(name.to_string());
         manifest["name"] = serde_json::Value::String(display_name);
         manifest["permissions"] = serde_json::json!({
             "read": ["transactions", "accounts"],
             "schemaName": format!("plugin_{}", table_safe_name)
         });
-        fs::write(plugin_dir.join("manifest.json"), serde_json::to_string_pretty(&manifest)?)?;
+        fs::write(
+            plugin_dir.join("manifest.json"),
+            serde_json::to_string_pretty(&manifest)?,
+        )?;
 
         // Write other template files as-is
-        fs::write(plugin_dir.join("package.json"), embedded_template::PACKAGE_JSON)?;
-        fs::write(plugin_dir.join("tsconfig.json"), embedded_template::TSCONFIG_JSON)?;
-        fs::write(plugin_dir.join("vite.config.ts"), embedded_template::VITE_CONFIG_TS)?;
-        fs::write(plugin_dir.join("svelte.config.js"), embedded_template::SVELTE_CONFIG_JS)?;
+        fs::write(
+            plugin_dir.join("package.json"),
+            embedded_template::PACKAGE_JSON,
+        )?;
+        fs::write(
+            plugin_dir.join("tsconfig.json"),
+            embedded_template::TSCONFIG_JSON,
+        )?;
+        fs::write(
+            plugin_dir.join("vite.config.ts"),
+            embedded_template::VITE_CONFIG_TS,
+        )?;
+        fs::write(
+            plugin_dir.join("svelte.config.js"),
+            embedded_template::SVELTE_CONFIG_JS,
+        )?;
         fs::write(plugin_dir.join(".gitignore"), embedded_template::GITIGNORE)?;
-        fs::write(plugin_dir.join("src/index.ts"), embedded_template::SRC_INDEX_TS)?;
-        fs::write(plugin_dir.join("src/HelloWorldView.svelte"), embedded_template::SRC_VIEW_SVELTE)?;
-        fs::write(plugin_dir.join(".github/workflows/release.yml"), embedded_template::GITHUB_WORKFLOW)?;
+        fs::write(
+            plugin_dir.join("src/index.ts"),
+            embedded_template::SRC_INDEX_TS,
+        )?;
+        fs::write(
+            plugin_dir.join("src/HelloWorldView.svelte"),
+            embedded_template::SRC_VIEW_SVELTE,
+        )?;
+        fs::write(
+            plugin_dir.join(".github/workflows/release.yml"),
+            embedded_template::GITHUB_WORKFLOW,
+        )?;
 
         // Write release script and make executable
         let release_script_path = plugin_dir.join("scripts/release.sh");
@@ -167,11 +206,19 @@ impl PluginService {
     }
 
     /// Install a plugin from local directory or GitHub URL
-    pub fn install_plugin(&self, source: &str, version: Option<&str>, force_build: bool) -> Result<PluginResult> {
+    pub fn install_plugin(
+        &self,
+        source: &str,
+        version: Option<&str>,
+        force_build: bool,
+    ) -> Result<PluginResult> {
         // Ensure plugins directory exists
         fs::create_dir_all(&self.plugins_dir)?;
 
-        if source.starts_with("http://") || source.starts_with("https://") || source.starts_with("git@") {
+        if source.starts_with("http://")
+            || source.starts_with("https://")
+            || source.starts_with("git@")
+        {
             self.install_from_github(source, version)
         } else {
             self.install_from_directory(Path::new(source), force_build)
@@ -179,7 +226,9 @@ impl PluginService {
     }
 
     fn install_from_directory(&self, source_dir: &Path, force_build: bool) -> Result<PluginResult> {
-        let source_dir = source_dir.canonicalize().unwrap_or_else(|_| source_dir.to_path_buf());
+        let source_dir = source_dir
+            .canonicalize()
+            .unwrap_or_else(|_| source_dir.to_path_buf());
 
         if !source_dir.exists() {
             return Ok(PluginResult {
@@ -194,7 +243,10 @@ impl PluginService {
         if !manifest_path.exists() {
             return Ok(PluginResult {
                 success: false,
-                error: Some(format!("No manifest.json found in {}", source_dir.display())),
+                error: Some(format!(
+                    "No manifest.json found in {}",
+                    source_dir.display()
+                )),
                 ..Default::default()
             });
         }
@@ -211,7 +263,10 @@ impl PluginService {
             } else {
                 return Ok(PluginResult {
                     success: false,
-                    error: Some(format!("Plugin not built and no package.json found. Expected dist/index.js at {}", dist_file.display())),
+                    error: Some(format!(
+                        "Plugin not built and no package.json found. Expected dist/index.js at {}",
+                        dist_file.display()
+                    )),
                     ..Default::default()
                 });
             }
@@ -221,7 +276,10 @@ impl PluginService {
         if !dist_file.exists() {
             return Ok(PluginResult {
                 success: false,
-                error: Some(format!("Build succeeded but dist/index.js not found at {}", dist_file.display())),
+                error: Some(format!(
+                    "Build succeeded but dist/index.js not found at {}",
+                    dist_file.display()
+                )),
                 ..Default::default()
             });
         }
@@ -249,13 +307,20 @@ impl PluginService {
 
         // Get release info from GitHub API
         let api_url = if let Some(v) = version {
-            format!("https://api.github.com/repos/{}/{}/releases/tags/{}", owner, repo, v)
+            format!(
+                "https://api.github.com/repos/{}/{}/releases/tags/{}",
+                owner, repo, v
+            )
         } else {
-            format!("https://api.github.com/repos/{}/{}/releases/latest", owner, repo)
+            format!(
+                "https://api.github.com/repos/{}/{}/releases/latest",
+                owner, repo
+            )
         };
 
         let client = reqwest::blocking::Client::new();
-        let response = client.get(&api_url)
+        let response = client
+            .get(&api_url)
             .header("Accept", "application/vnd.github.v3+json")
             .header("User-Agent", "Treeline-CLI")
             .send()
@@ -263,9 +328,17 @@ impl PluginService {
 
         if response.status() == reqwest::StatusCode::NOT_FOUND {
             let msg = if version.is_some() {
-                format!("Release {} not found for {}/{}", version.unwrap(), owner, repo)
+                format!(
+                    "Release {} not found for {}/{}",
+                    version.unwrap(),
+                    owner,
+                    repo
+                )
             } else {
-                format!("No releases found for {}/{}. The plugin author needs to create a release.", owner, repo)
+                format!(
+                    "No releases found for {}/{}. The plugin author needs to create a release.",
+                    owner, repo
+                )
             };
             return Ok(PluginResult {
                 success: false,
@@ -279,11 +352,15 @@ impl PluginService {
         // Find manifest.json and index.js in release assets
         let assets: HashMap<String, String> = release_data["assets"]
             .as_array()
-            .map(|arr| arr.iter().filter_map(|asset| {
-                let name = asset["name"].as_str()?;
-                let url = asset["browser_download_url"].as_str()?;
-                Some((name.to_string(), url.to_string()))
-            }).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|asset| {
+                        let name = asset["name"].as_str()?;
+                        let url = asset["browser_download_url"].as_str()?;
+                        Some((name.to_string(), url.to_string()))
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
 
         if !assets.contains_key("manifest.json") {
@@ -303,12 +380,8 @@ impl PluginService {
         }
 
         // Download files
-        let manifest_content = client.get(&assets["manifest.json"])
-            .send()?
-            .bytes()?;
-        let index_content = client.get(&assets["index.js"])
-            .send()?
-            .bytes()?;
+        let manifest_content = client.get(&assets["manifest.json"]).send()?.bytes()?;
+        let index_content = client.get(&assets["index.js"]).send()?.bytes()?;
 
         let mut manifest: PluginManifest = serde_json::from_slice(&manifest_content)?;
         manifest.source = format!("https://github.com/{}/{}", owner, repo);
@@ -317,10 +390,14 @@ impl PluginService {
         let install_dir = self.plugins_dir.join(&manifest.id);
         fs::create_dir_all(&install_dir)?;
 
-        fs::write(install_dir.join("manifest.json"), serde_json::to_string_pretty(&manifest)?)?;
+        fs::write(
+            install_dir.join("manifest.json"),
+            serde_json::to_string_pretty(&manifest)?,
+        )?;
         fs::write(install_dir.join("index.js"), &index_content)?;
 
-        let version = release_data["tag_name"].as_str()
+        let version = release_data["tag_name"]
+            .as_str()
             .map(String::from)
             .unwrap_or_else(|| manifest.version.clone());
 
@@ -346,14 +423,15 @@ impl PluginService {
             return Ok((caps[1].to_string(), caps[2].to_string()));
         }
 
-        anyhow::bail!("Invalid GitHub URL: {}. Expected https://github.com/owner/repo", url)
+        anyhow::bail!(
+            "Invalid GitHub URL: {}. Expected https://github.com/owner/repo",
+            url
+        )
     }
 
     fn build_plugin(&self, plugin_dir: &Path) -> Result<()> {
         // Check npm is available
-        let npm_check = Command::new("npm")
-            .arg("--version")
-            .output();
+        let npm_check = Command::new("npm").arg("--version").output();
 
         if npm_check.is_err() {
             anyhow::bail!("npm command not found. Please install Node.js and npm.");
@@ -367,7 +445,10 @@ impl PluginService {
             .context("Failed to run npm install")?;
 
         if !install.status.success() {
-            anyhow::bail!("npm install failed: {}", String::from_utf8_lossy(&install.stderr));
+            anyhow::bail!(
+                "npm install failed: {}",
+                String::from_utf8_lossy(&install.stderr)
+            );
         }
 
         // Build plugin
@@ -378,7 +459,10 @@ impl PluginService {
             .context("Failed to run npm run build")?;
 
         if !build.status.success() {
-            anyhow::bail!("npm run build failed: {}", String::from_utf8_lossy(&build.stderr));
+            anyhow::bail!(
+                "npm run build failed: {}",
+                String::from_utf8_lossy(&build.stderr)
+            );
         }
 
         Ok(())
@@ -455,17 +539,28 @@ impl PluginService {
     }
 
     /// Fetch manifest from GitHub release
-    pub fn fetch_manifest(&self, url: &str, version: Option<&str>) -> Result<(PluginManifest, String)> {
+    pub fn fetch_manifest(
+        &self,
+        url: &str,
+        version: Option<&str>,
+    ) -> Result<(PluginManifest, String)> {
         let (owner, repo) = self.parse_github_url(url)?;
 
         let api_url = if let Some(v) = version {
-            format!("https://api.github.com/repos/{}/{}/releases/tags/{}", owner, repo, v)
+            format!(
+                "https://api.github.com/repos/{}/{}/releases/tags/{}",
+                owner, repo, v
+            )
         } else {
-            format!("https://api.github.com/repos/{}/{}/releases/latest", owner, repo)
+            format!(
+                "https://api.github.com/repos/{}/{}/releases/latest",
+                owner, repo
+            )
         };
 
         let client = reqwest::blocking::Client::new();
-        let response = client.get(&api_url)
+        let response = client
+            .get(&api_url)
             .header("Accept", "application/vnd.github.v3+json")
             .header("User-Agent", "Treeline-CLI")
             .send()?;
@@ -478,23 +573,26 @@ impl PluginService {
 
         let assets: HashMap<String, String> = release_data["assets"]
             .as_array()
-            .map(|arr| arr.iter().filter_map(|asset| {
-                let name = asset["name"].as_str()?;
-                let url = asset["browser_download_url"].as_str()?;
-                Some((name.to_string(), url.to_string()))
-            }).collect())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|asset| {
+                        let name = asset["name"].as_str()?;
+                        let url = asset["browser_download_url"].as_str()?;
+                        Some((name.to_string(), url.to_string()))
+                    })
+                    .collect()
+            })
             .unwrap_or_default();
 
         if !assets.contains_key("manifest.json") {
             anyhow::bail!("Release is missing manifest.json asset");
         }
 
-        let manifest_content = client.get(&assets["manifest.json"])
-            .send()?
-            .bytes()?;
+        let manifest_content = client.get(&assets["manifest.json"]).send()?.bytes()?;
 
         let manifest: PluginManifest = serde_json::from_slice(&manifest_content)?;
-        let version = release_data["tag_name"].as_str()
+        let version = release_data["tag_name"]
+            .as_str()
             .map(String::from)
             .unwrap_or_else(|| manifest.version.clone());
 

@@ -6,8 +6,8 @@
 use chrono::NaiveDate;
 use serde_json::Value as JsonValue;
 
-use crate::domain::{Account, BalanceSnapshot, Transaction};
 use crate::domain::result::Result;
+use crate::domain::{Account, BalanceSnapshot, Transaction};
 
 /// Result of fetching accounts from a provider
 #[derive(Debug, Default)]

@@ -7,12 +7,12 @@
 //! - **services**: Business logic orchestration
 //! - **adapters**: Concrete implementations (DuckDB, SimpleFIN, etc.)
 
-pub mod domain;
-pub mod ports;
-pub mod services;
 pub mod adapters;
 pub mod config;
+pub mod domain;
 pub mod migrations;
+pub mod ports;
+pub mod services;
 
 use std::path::Path;
 use std::sync::Arc;
@@ -24,12 +24,12 @@ use config::Config;
 use services::*;
 
 // Re-export commonly used types at crate root
-pub use domain::{
-    Account, Transaction, BalanceSnapshot,
-    User, BackupMetadata, EncryptionMetadata, EncryptionStatus,
-};
-pub use domain::result::{Error, OperationResult};
 pub use adapters::duckdb::QueryResult;
+pub use domain::result::{Error, OperationResult};
+pub use domain::{
+    Account, BackupMetadata, BalanceSnapshot, EncryptionMetadata, EncryptionStatus, Transaction,
+    User,
+};
 
 /// Main context for Treeline operations
 ///
@@ -74,11 +74,15 @@ impl TreelineContext {
         let sync_service = SyncService::new(Arc::clone(&repository), treeline_dir.to_path_buf());
         let query_service = QueryService::new(Arc::clone(&repository));
         let tag_service = TagService::new(Arc::clone(&repository));
-        let backup_service = BackupService::new(treeline_dir.to_path_buf(), db_filename.to_string());
+        let backup_service =
+            BackupService::new(treeline_dir.to_path_buf(), db_filename.to_string());
         let compact_service = CompactService::new(Arc::clone(&repository));
-        let doctor_service = DoctorService::new(Arc::clone(&repository), treeline_dir.to_path_buf());
-        let encryption_service = EncryptionService::new(treeline_dir.to_path_buf(), db_path.clone());
-        let import_service = ImportService::new(Arc::clone(&repository), treeline_dir.to_path_buf());
+        let doctor_service =
+            DoctorService::new(Arc::clone(&repository), treeline_dir.to_path_buf());
+        let encryption_service =
+            EncryptionService::new(treeline_dir.to_path_buf(), db_path.clone());
+        let import_service =
+            ImportService::new(Arc::clone(&repository), treeline_dir.to_path_buf());
         let balance_service = BalanceService::new(Arc::clone(&repository));
         let plugin_service = services::PluginService::new(treeline_dir);
 

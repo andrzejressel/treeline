@@ -96,7 +96,9 @@ impl<'a> MigrationService<'a> {
 
     /// Get list of already applied migration names
     pub fn get_applied(&self) -> Result<Vec<String>> {
-        let mut stmt = self.conn.prepare("SELECT migration_name FROM sys_migrations ORDER BY migration_name")?;
+        let mut stmt = self
+            .conn
+            .prepare("SELECT migration_name FROM sys_migrations ORDER BY migration_name")?;
         let names = stmt.query_map([], |row| row.get::<_, String>(0))?;
 
         let mut result = Vec::new();
@@ -109,7 +111,8 @@ impl<'a> MigrationService<'a> {
     /// Get list of pending migration names
     pub fn get_pending(&self) -> Result<Vec<String>> {
         let applied = self.get_applied()?;
-        let pending: Vec<String> = MIGRATIONS.iter()
+        let pending: Vec<String> = MIGRATIONS
+            .iter()
             .filter(|(name, _)| !applied.contains(&name.to_string()))
             .map(|(name, _)| name.to_string())
             .collect();
@@ -157,7 +160,8 @@ mod tests {
         conn.execute(
             "INSERT INTO sys_migrations (migration_name) VALUES (?)",
             [MIGRATIONS[0].0],
-        ).unwrap();
+        )
+        .unwrap();
 
         let service = MigrationService::new(&conn);
         let pending = service.get_pending().unwrap();

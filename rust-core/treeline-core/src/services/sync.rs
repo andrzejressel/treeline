@@ -9,10 +9,10 @@ use chrono::{Duration, NaiveDate, Utc};
 use serde::Serialize;
 use uuid::Uuid;
 
-use crate::adapters::duckdb::DuckDbRepository;
 use crate::adapters::demo::DemoDataProvider;
-use crate::adapters::simplefin::SimpleFINProvider;
+use crate::adapters::duckdb::DuckDbRepository;
 use crate::adapters::lunchflow::LunchflowProvider;
+use crate::adapters::simplefin::SimpleFINProvider;
 use crate::ports::{DataAggregationProvider, IntegrationProvider};
 use crate::services::TagService;
 
@@ -28,7 +28,8 @@ pub struct SyncService {
 impl SyncService {
     pub fn new(repository: Arc<DuckDbRepository>, treeline_dir: PathBuf) -> Self {
         let mut providers: HashMap<String, Arc<dyn DataAggregationProvider>> = HashMap::new();
-        let mut integration_providers: HashMap<String, Arc<dyn IntegrationProvider>> = HashMap::new();
+        let mut integration_providers: HashMap<String, Arc<dyn IntegrationProvider>> =
+            HashMap::new();
 
         // Register built-in providers
         let demo = Arc::new(DemoDataProvider::new());
@@ -59,14 +60,17 @@ impl SyncService {
     ///
     /// If `balances_only` is true, skips transaction fetching entirely.
     /// This is useful for users who just want to track account balances.
-    pub fn sync(&self, integration: Option<&str>, dry_run: bool, balances_only: bool) -> Result<SyncResult> {
+    pub fn sync(
+        &self,
+        integration: Option<&str>,
+        dry_run: bool,
+        balances_only: bool,
+    ) -> Result<SyncResult> {
         let integrations = self.repository.get_integrations()?;
         let mut results = Vec::new();
 
         let integrations_to_sync: Vec<_> = if let Some(name) = integration {
-            integrations.iter()
-                .filter(|i| i.name == name)
-                .collect()
+            integrations.iter().filter(|i| i.name == name).collect()
         } else {
             integrations.iter().collect()
         };
@@ -94,7 +98,9 @@ impl SyncService {
         balances_only: bool,
     ) -> Result<IntegrationSyncResult> {
         // Look up provider by name
-        let provider = self.providers.get(name)
+        let provider = self
+            .providers
+            .get(name)
             .ok_or_else(|| anyhow::anyhow!("Unknown provider: {}", name))?;
 
         let now = Utc::now();
@@ -107,7 +113,11 @@ impl SyncService {
             None => ((now - Duration::days(90)).naive_utc().date(), false),
         };
 
-        let sync_type = if is_incremental { "incremental" } else { "initial" };
+        let sync_type = if is_incremental {
+            "incremental"
+        } else {
+            "initial"
+        };
 
         // Fetch accounts from provider
         let accounts_result = provider.get_accounts(settings)?;
@@ -197,9 +207,7 @@ impl SyncService {
         } else {
             // Fetch transactions (excluding per-account balances-only settings)
             // Check accountSettings for balancesOnly flag on each account
-            let account_settings = settings
-                .get("accountSettings")
-                .and_then(|v| v.as_object());
+            let account_settings = settings.get("accountSettings").and_then(|v| v.as_object());
 
             let ext_account_ids: Vec<String> = external_to_internal
                 .keys()
@@ -220,7 +228,8 @@ impl SyncService {
                 .cloned()
                 .collect();
 
-            let txs_result = provider.get_transactions(start_date, end_date, &ext_account_ids, settings)?;
+            let txs_result =
+                provider.get_transactions(start_date, end_date, &ext_account_ids, settings)?;
             provider_warnings.extend(txs_result.warnings);
 
             // Process transactions with deduplication
@@ -322,7 +331,8 @@ impl SyncService {
     /// List configured integrations
     pub fn list_integrations(&self) -> Result<Vec<IntegrationInfo>> {
         let integrations = self.repository.get_integrations()?;
-        Ok(integrations.iter()
+        Ok(integrations
+            .iter()
             .map(|i| IntegrationInfo {
                 name: i.name.clone(),
                 provider: i.name.clone(),
@@ -339,12 +349,19 @@ impl SyncService {
     }
 
     /// Set up a new integration using the appropriate provider
-    pub fn setup_integration(&self, provider_name: &str, options: &serde_json::Value) -> Result<()> {
-        let provider = self.integration_providers.get(provider_name)
+    pub fn setup_integration(
+        &self,
+        provider_name: &str,
+        options: &serde_json::Value,
+    ) -> Result<()> {
+        let provider = self
+            .integration_providers
+            .get(provider_name)
             .ok_or_else(|| anyhow::anyhow!("Unknown provider: {}", provider_name))?;
 
         let settings = provider.setup(options)?;
-        self.repository.upsert_integration(provider_name, &settings)?;
+        self.repository
+            .upsert_integration(provider_name, &settings)?;
         Ok(())
     }
 
@@ -355,9 +372,12 @@ impl SyncService {
 
     /// Set up SimpleFIN integration (convenience method)
     pub fn setup_simplefin(&self, setup_token: &str) -> Result<()> {
-        self.setup_integration("simplefin", &serde_json::json!({
-            "setupToken": setup_token
-        }))
+        self.setup_integration(
+            "simplefin",
+            &serde_json::json!({
+                "setupToken": setup_token
+            }),
+        )
     }
 
     /// Set up Lunchflow integration (convenience method)
@@ -428,8 +448,8 @@ mod tests {
         let tx2 = Transaction::new(
             Uuid::parse_str("33333333-3333-3333-3333-333333333333").unwrap(), // Different ID
             Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap(), // Same account
-            Decimal::new(1234, 2), // Same amount
-            NaiveDate::from_ymd_opt(2024, 1, 15).unwrap(), // Same date
+            Decimal::new(1234, 2),                                            // Same amount
+            NaiveDate::from_ymd_opt(2024, 1, 15).unwrap(),                    // Same date
         );
 
         // Fingerprints should match (same account, amount, date)
