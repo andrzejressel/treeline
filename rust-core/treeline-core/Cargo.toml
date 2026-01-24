@@ -51,6 +51,9 @@ hex = "0.4"
 # Zip archives
 zip.workspace = true
 
+# File locking (cross-platform)
+fs2.workspace = true
+
 # URL parsing
 url = "2"
 

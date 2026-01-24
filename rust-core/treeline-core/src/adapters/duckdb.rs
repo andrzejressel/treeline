@@ -1,9 +1,10 @@
 //! DuckDB repository implementation
 
+use std::fs::{File, OpenOptions};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
-use std::thread;
-use std::time::Duration;
+
+use fs2::FileExt;
 
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
@@ -30,29 +31,17 @@ fn validate_sql_syntax(sql: &str) -> Result<()> {
     Ok(())
 }
 
-/// Maximum number of retries when database file is locked
-const MAX_RETRIES: u32 = 5;
-
-/// Initial retry delay in milliseconds (doubles each retry: 50, 100, 200, 400, 800ms)
-const INITIAL_RETRY_DELAY_MS: u64 = 50;
-
-/// Check if an error message indicates a file locking issue that should be retried
-fn is_retryable_error(err_msg: &str) -> bool {
-    let lower = err_msg.to_lowercase();
-    // Windows error messages
-    lower.contains("being used by another process")
-        || lower.contains("cannot access the file")
-        // Unix/macOS error messages
-        || lower.contains("resource temporarily unavailable")
-        || lower.contains("database is locked")
-        || lower.contains("file is already open")
-}
-
 /// DuckDB repository implementation
+///
+/// Uses a filesystem lock to prevent concurrent access from multiple processes
+/// (app, CLI, etc.). The lock is held for the lifetime of the repository.
 pub struct DuckDbRepository {
     conn: Mutex<Connection>,
     db_path: PathBuf,
     encryption_key: Option<String>,
+    /// Filesystem lock file - held for the lifetime of the repository.
+    /// The lock is released when this file is dropped.
+    _lock_file: File,
 }
 
 impl DuckDbRepository {
@@ -61,47 +50,52 @@ impl DuckDbRepository {
     /// For encrypted databases, uses DuckDB's ATTACH with ENCRYPTION_KEY.
     /// The key should be the hex-encoded derived key from Argon2.
     ///
-    /// Includes retry logic with exponential backoff for file locking errors,
-    /// which can occur when multiple operations try to access the database
-    /// simultaneously (e.g., during app startup with auto-sync).
+    /// Uses a filesystem lock to prevent concurrent access from multiple processes
+    /// or threads. The lock is held for the lifetime of the repository.
     pub fn new(db_path: &Path, encryption_key: Option<&str>) -> Result<Self> {
-        let mut last_error = None;
+        // Acquire filesystem lock first
+        let lock_file = Self::acquire_file_lock(db_path)?;
 
-        for attempt in 0..MAX_RETRIES {
-            match Self::try_open_connection(db_path, encryption_key) {
-                Ok(conn) => {
-                    return Ok(Self {
-                        conn: Mutex::new(conn),
-                        db_path: db_path.to_path_buf(),
-                        encryption_key: encryption_key.map(|k| k.to_string()),
-                    });
-                }
-                Err(e) => {
-                    let err_msg = e.to_string();
-                    if is_retryable_error(&err_msg) && attempt < MAX_RETRIES - 1 {
-                        // Exponential backoff: 50ms, 100ms, 200ms, 400ms
-                        let delay =
-                            Duration::from_millis(INITIAL_RETRY_DELAY_MS * 2u64.pow(attempt));
-                        eprintln!(
-                            "[treeline] Database busy, retrying in {}ms (attempt {}/{}): {}",
-                            delay.as_millis(),
-                            attempt + 1,
-                            MAX_RETRIES,
-                            err_msg
-                        );
-                        thread::sleep(delay);
-                        last_error = Some(e);
-                        continue;
-                    }
-                    // Non-retryable error or max retries reached
-                    return Err(e);
-                }
-            }
+        // Open DuckDB connection
+        let conn = Self::try_open_connection(db_path, encryption_key)?;
+
+        Ok(Self {
+            conn: Mutex::new(conn),
+            db_path: db_path.to_path_buf(),
+            encryption_key: encryption_key.map(|k| k.to_string()),
+            _lock_file: lock_file,
+        })
+    }
+
+    /// Acquire a filesystem lock for the database.
+    ///
+    /// This prevents concurrent access from multiple processes (app, CLI, etc.).
+    /// Uses a blocking lock - if another process holds the lock, this will wait
+    /// until it's released. The OS kernel manages the queue of waiters.
+    fn acquire_file_lock(db_path: &Path) -> Result<File> {
+        let lock_path = db_path.with_extension("duckdb.lock");
+
+        // Ensure parent directory exists
+        if let Some(parent) = lock_path.parent() {
+            std::fs::create_dir_all(parent)?;
         }
 
-        // Should only reach here if all retries failed
-        Err(last_error
-            .unwrap_or_else(|| anyhow!("Failed to open database after {} retries", MAX_RETRIES)))
+        // Open or create the lock file
+        let lock_file = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(false)
+            .open(&lock_path)
+            .map_err(|e| anyhow!("Failed to open lock file {}: {}", lock_path.display(), e))?;
+
+        // Acquire exclusive lock (blocks until available)
+        // The OS kernel queues waiters and wakes them in order when lock is released
+        lock_file
+            .lock_exclusive()
+            .map_err(|e| anyhow!("Failed to acquire database lock: {}", e))?;
+
+        Ok(lock_file)
     }
 
     /// Attempt to open a database connection (called by new() with retry logic)
@@ -1414,6 +1408,9 @@ impl DuckDbRepository {
     pub fn compact(&self) -> Result<()> {
         use std::fs;
 
+        // Note: We already hold the filesystem lock for the repository lifetime,
+        // so no additional locking is needed here.
+
         // Proper DuckDB compaction: COPY FROM DATABASE to a new file
         // Note: VACUUM does not reclaim space in DuckDB - only COPY FROM DATABASE does
         // Reference: https://duckdb.org/docs/stable/operations_manual/footprint_of_duckdb/reclaiming_space
@@ -1476,7 +1473,8 @@ impl DuckDbRepository {
         drop(compact_conn);
 
         // Close the main database connection temporarily
-        drop(self.conn.lock().unwrap());
+        // (we hold the internal mutex to prevent other threads from using the connection)
+        let mut conn_guard = self.conn.lock().unwrap();
 
         // Replace the old database with the compacted one
         // Backup the original first, then move temp in place
@@ -1505,7 +1503,7 @@ impl DuckDbRepository {
         };
 
         // Replace the connection in the mutex
-        *self.conn.lock().unwrap() = new_conn;
+        *conn_guard = new_conn;
 
         // Clean up the backup file
         let _ = fs::remove_file(&backup_db);
