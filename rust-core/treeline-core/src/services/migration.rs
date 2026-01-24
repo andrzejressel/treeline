@@ -74,6 +74,13 @@ impl<'a> MigrationService<'a> {
             }
         }
 
+        // Force checkpoint after migrations to flush DDL to main database file.
+        // This prevents WAL replay issues with ALTER TABLE that have function defaults
+        // (DuckDB bug: WAL replay can't resolve functions like gen_random_uuid()).
+        if !newly_applied.is_empty() {
+            let _ = self.conn.execute("CHECKPOINT", []);
+        }
+
         Ok(MigrationResult {
             applied: newly_applied,
             already_applied,

@@ -1822,6 +1822,19 @@ fn parse_duckdb_array(s: &str) -> Vec<String> {
         .collect()
 }
 
+/// Ensure WAL is checkpointed before the connection is dropped.
+/// This prevents WAL corruption on restart.
+impl Drop for DuckDbRepository {
+    fn drop(&mut self) {
+        // Force a checkpoint to flush WAL to the main database file
+        // This ensures clean shutdown and prevents WAL corruption on restart
+        if let Ok(conn) = self.conn.lock() {
+            let _ = conn.execute("CHECKPOINT", []);
+        }
+        // _lock_file is dropped after this, releasing the filesystem lock
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
