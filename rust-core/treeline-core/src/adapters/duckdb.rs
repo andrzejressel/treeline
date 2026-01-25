@@ -20,6 +20,13 @@ use crate::services::MigrationService;
 /// Validate SQL syntax before execution to catch malformed queries early.
 /// This prevents crashes from malformed SQL reaching the database engine.
 fn validate_sql_syntax(sql: &str) -> Result<()> {
+    // Skip validation for DuckDB-specific commands that sqlparser doesn't recognize.
+    // These are valid DuckDB commands but the sqlparser DuckDbDialect doesn't parse them.
+    let first_word = sql.trim().split_whitespace().next().unwrap_or("");
+    if first_word.eq_ignore_ascii_case("CHECKPOINT") || first_word.eq_ignore_ascii_case("VACUUM") {
+        return Ok(());
+    }
+
     let dialect = DuckDbDialect {};
     Parser::parse_sql(&dialect, sql).map_err(|e| {
         // Clean up the error message - remove redundant prefix
@@ -2129,6 +2136,34 @@ mod tests {
             "Error was: {}",
             err
         );
+    }
+
+    // ==================== DuckDB-specific Commands ====================
+    // These commands are valid in DuckDB but not recognized by sqlparser's DuckDbDialect.
+    // We skip validation for these to allow them through.
+
+    #[test]
+    fn test_checkpoint_command() {
+        // CHECKPOINT is a valid DuckDB command to force WAL flush
+        // sqlparser doesn't recognize it, so we skip validation for this command
+        assert!(validate_sql_syntax("CHECKPOINT").is_ok());
+    }
+
+    #[test]
+    fn test_checkpoint_command_lowercase() {
+        assert!(validate_sql_syntax("checkpoint").is_ok());
+    }
+
+    #[test]
+    fn test_vacuum_command() {
+        // VACUUM is a valid DuckDB command to reclaim space
+        // sqlparser doesn't recognize it, so we skip validation for this command
+        assert!(validate_sql_syntax("VACUUM").is_ok());
+    }
+
+    #[test]
+    fn test_vacuum_command_lowercase() {
+        assert!(validate_sql_syntax("vacuum").is_ok());
     }
 
     // ==================== parse_duckdb_array Tests ====================

@@ -16,7 +16,9 @@ use rust_decimal::Decimal;
 use treeline_core::adapters::duckdb::DuckDbRepository;
 use treeline_core::config::ColumnMappings;
 use treeline_core::domain::{Account, BalanceSnapshot, Transaction};
-use treeline_core::services::{BackupService, ImportOptions, ImportService, NumberFormat, TagService};
+use treeline_core::services::{
+    BackupService, ImportOptions, ImportService, NumberFormat, TagService,
+};
 
 // ============================================================================
 // Test Helpers
@@ -753,4 +755,38 @@ fn test_query_validation() {
     // Invalid SQL should return error
     let result = repo.execute_query("SELEC * FROM sys_accounts"); // typo in SELECT
     assert!(result.is_err(), "Invalid SQL should fail");
+}
+
+// ============================================================================
+// DuckDB Command Tests
+// ============================================================================
+// These tests verify that DuckDB-specific commands (CHECKPOINT, VACUUM) work
+// through the repository layer. Full plugin migration scenarios are tested
+// in treeline-app where they use TreelineContext (the actual code path).
+
+/// Test that CHECKPOINT command can be executed via execute_sql
+/// This is critical for plugin migrations which use CHECKPOINT after DDL
+#[test]
+fn test_checkpoint_command_execution() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo = create_test_repo(&temp_dir);
+
+    // CHECKPOINT should succeed (it's a valid DuckDB command)
+    let result = repo.execute_sql("CHECKPOINT");
+    assert!(
+        result.is_ok(),
+        "CHECKPOINT should succeed: {:?}",
+        result.err()
+    );
+}
+
+/// Test that VACUUM command can be executed via execute_sql
+#[test]
+fn test_vacuum_command_execution() {
+    let temp_dir = TempDir::new().unwrap();
+    let repo = create_test_repo(&temp_dir);
+
+    // VACUUM should succeed
+    let result = repo.execute_sql("VACUUM");
+    assert!(result.is_ok(), "VACUUM should succeed: {:?}", result.err());
 }
